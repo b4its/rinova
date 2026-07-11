@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE workspace_members\n        SET role = $3\n        WHERE workspace_id = $1 AND user_id = $2\n        RETURNING id, workspace_id, user_id, role as \"role: Role\",\n                  invitation_status as \"invitation_status: InvitationStatus\",\n                  invited_at, joined_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "workspace_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "role: Role",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "invitation_status: InvitationStatus",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "invited_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "joined_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "46ee55501c6e8062a0f72b564343fde8c406b8db8556eb1578c5370ba51fb184"
+}

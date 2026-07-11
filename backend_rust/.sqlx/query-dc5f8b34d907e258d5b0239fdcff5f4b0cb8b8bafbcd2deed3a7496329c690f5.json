@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE workspace_members\n        SET invitation_status = 'declined'\n        WHERE workspace_id = $1 AND user_id = $2\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dc5f8b34d907e258d5b0239fdcff5f4b0cb8b8bafbcd2deed3a7496329c690f5"
+}

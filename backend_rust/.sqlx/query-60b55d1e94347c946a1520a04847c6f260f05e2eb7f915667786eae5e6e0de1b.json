@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO workspace_members (workspace_id, user_id, role, invitation_status)\n        VALUES ($1, $2, $3, 'pending')\n        RETURNING id, workspace_id, user_id, role as \"role: Role\",\n                  invitation_status as \"invitation_status: InvitationStatus\",\n                  invited_at, joined_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "workspace_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "role: Role",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "invitation_status: InvitationStatus",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "invited_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "joined_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "60b55d1e94347c946a1520a04847c6f260f05e2eb7f915667786eae5e6e0de1b"
+}

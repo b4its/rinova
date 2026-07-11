@@ -6,19 +6,24 @@
 # =============================================================================
 # Stage 1: Builder - Compile Rust application
 # =============================================================================
-FROM rust:1.75-alpine AS builder
+FROM rust:1.88-alpine AS builder
 
 # Install build dependencies
 # - musl-dev: Static linking for Alpine
 # - pkgconfig: Library configuration
 # - openssl-dev: SSL/TLS support
-# - protobuf: For gRPC/protobuf compilation (if needed)
+# - protobuf: For gRPC/protobuf compilation
+# - g++: C++ compiler for zmq-sys
+# - zeromq-dev: ZeroMQ development files
 RUN apk add --no-cache \
     musl-dev \
     pkgconfig \
     openssl-dev \
     openssl-libs-static \
-    protobuf
+    protobuf \
+    g++ \
+    zeromq-dev \
+    cmake
 
 # Set working directory
 WORKDIR /app
@@ -47,10 +52,12 @@ FROM alpine:3.19 AS runtime
 # - ca-certificates: TLS/SSL certificate validation
 # - tzdata: Timezone support
 # - curl: Health checks
+# - libzmq: ZeroMQ library for runtime
 RUN apk add --no-cache \
     ca-certificates \
     tzdata \
-    curl
+    curl \
+    libzmq
 
 # Create non-root user for security
 RUN addgroup -S rinova && adduser -S rinova -G rinova
@@ -116,14 +123,17 @@ ENTRYPOINT ["/app/service"]
 # =============================================================================
 # Stage 3: Development - For local development with hot reload
 # =============================================================================
-FROM rust:1.75-alpine AS development
+FROM rust:1.88-alpine AS development
 
 # Install development dependencies
 RUN apk add --no-cache \
     musl-dev \
     pkgconfig \
     openssl-dev \
-    git
+    git \
+    g++ \
+    zeromq-dev \
+    cmake
 
 WORKDIR /app
 

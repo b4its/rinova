@@ -1,0 +1,105 @@
+# Rinova Website Builder - Docker Ignore File
+# This file excludes unnecessary files from Docker build context
+
+# ============================================
+# Build Artifacts
+# ============================================
+# Rust build artifacts (VERY IMPORTANT - can be 1-2GB)
+**/target/
+**/target/**/*
+*.pdb
+
+# Node.js dependencies
+**/node_modules/
+**/node_modules/**/*
+
+# Build outputs
+**/dist/
+**/build/
+**/.output/
+**/.nuxt/
+**/.cache/
+
+# ============================================
+# Version Control
+# ============================================
+.git/
+.gitignore
+.gitattributes
+
+# ============================================
+# IDE and Editor Files
+# ============================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ============================================
+# Environment and Configuration
+# ============================================
+.env
+.env.*
+!.env.example
+*.local
+
+# ============================================
+# Documentation and Misc
+# ============================================
+**/docs/
+**/*.md
+!README.md
+LICENSE
+CONTRIBUTING.md
+CHANGELOG.md
+
+# ============================================
+# Test and Coverage
+# ============================================
+**/coverage/
+**/.coverage/
+**/test-results/
+**/*.test.js
+**/*.spec.js
+**/__tests__/
+
+# ============================================
+# Temporary and Log Files
+# ============================================
+**/tmp/
+**/temp/
+**/*.log
+**/*.pid
+**/*.seed
+**/*.pid.lock
+
+# ============================================
+# Database Files (Development)
+# ============================================
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+# ============================================
+# Docker Files (Prevent recursive builds)
+# ============================================
+docker-compose*.yml
+.docker/
+Dockerfile*
+
+# ============================================
+# CI/CD Configuration
+# ============================================
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+.circleci/
+
+# ============================================
+# Kiro Spec Files
+# ============================================
+.kiro/

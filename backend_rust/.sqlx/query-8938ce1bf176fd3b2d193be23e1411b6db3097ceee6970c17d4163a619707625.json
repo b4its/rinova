@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE workspace_members\n        SET invitation_status = 'expired'\n        WHERE invitation_status = 'pending'\n          AND invited_at < NOW() - INTERVAL '7 days'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "8938ce1bf176fd3b2d193be23e1411b6db3097ceee6970c17d4163a619707625"
+}

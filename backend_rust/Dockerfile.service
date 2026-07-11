@@ -5,17 +5,22 @@
 # =============================================================================
 # Stage 1: Builder - Compile Rust application
 # =============================================================================
-FROM rust:1.75-alpine AS builder
+FROM rust:1.88-alpine AS builder
 
 # Install build dependencies
 # - musl-dev: Static linking for Alpine
 # - pkgconfig: Library configuration
 # - openssl-dev: SSL/TLS support
+# - g++: C++ compiler for zmq-sys
+# - zeromq-dev: ZeroMQ development files
 RUN apk add --no-cache \
     musl-dev \
     pkgconfig \
     openssl-dev \
-    openssl-libs-static
+    openssl-libs-static \
+    g++ \
+    zeromq-dev \
+    cmake
 
 WORKDIR /app
 
@@ -42,7 +47,8 @@ FROM alpine:3.19 AS runtime
 RUN apk add --no-cache \
     ca-certificates \
     tzdata \
-    curl
+    curl \
+    libzmq
 
 # Create non-root user for security
 RUN addgroup -S rinova && adduser -S rinova -G rinova

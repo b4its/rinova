@@ -1,39 +1,53 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  compatibilityDate: '2024-11-01',
+  compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  
-  future: {
-    compatibilityVersion: 4
-  },
-
-  typescript: {
-    strict: true,
-    typeCheck: true
-  },
 
   modules: [
     '@pinia/nuxt',
     '@nuxtjs/tailwindcss'
   ],
 
-  pinia: {
-    storesDirs: ['./stores/**']
+  typescript: {
+    strict: true
   },
 
-  tailwindcss: {
-    cssPath: '~/assets/css/tailwind.css',
-    configPath: 'tailwind.config.js',
-    exposeConfig: false,
-    viewer: true
+  runtimeConfig: {
+    // Server-side only
+    jwtSecret: process.env.JWT_SECRET || 'your-secret-key',
+    
+    // Public runtime config (exposed to client)
+    public: {
+      apiUrl: process.env.NUXT_PUBLIC_API_URL || 'http://localhost:8080',
+      wsUrl: process.env.NUXT_PUBLIC_WS_URL || 'ws://localhost:8080'
+    }
   },
 
   app: {
     head: {
-      title: 'Rinova Website Builder',
+      title: 'Rinova - Professional Website Builder',
       meta: [
-        { name: 'description', content: 'Professional website builder with drag & drop editor' }
+        { name: 'description', content: 'Create professional websites with drag & drop editor. High performance, blockchain-powered proof of ownership.' },
+        { name: 'viewport', content: 'width=device-width, initial-scale=1' }
+      ],
+      link: [
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }
       ]
+    }
+  },
+
+  pinia: {
+    storesDirs: ['./stores/**']
+  },
+
+  // Enable SSR
+  ssr: true,
+
+  // Vite configuration
+  vite: {
+    server: {
+      port: 3000,
+      host: '0.0.0.0'
     }
   }
 })

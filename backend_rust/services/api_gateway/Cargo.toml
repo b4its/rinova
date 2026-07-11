@@ -1,0 +1,24 @@
+[package]
+name = "api_gateway"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "api_gateway"
+path = "src/main.rs"
+
+[dependencies]
+actix-web.workspace = true
+actix-cors.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-actix-web.workspace = true
+tracing-subscriber.workspace = true
+jsonwebtoken.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+dotenv.workspace = true

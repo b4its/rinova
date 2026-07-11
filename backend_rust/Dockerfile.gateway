@@ -1,0 +1,50 @@
+# Rinova Website Builder - API Gateway Dockerfile
+# Multi-stage build for optimized production image
+
+# Build stage
+FROM rust:1.75-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache musl-dev pkgconfig openssl-dev
+
+WORKDIR /app
+
+# Copy Cargo files
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+
+# Build the API Gateway
+RUN cargo build --release --bin api_gateway
+
+# Production stage
+FROM alpine:3.19
+
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates tzdata
+
+# Create non-root user
+RUN addgroup -S rinova && adduser -S rinova -G rinova
+
+WORKDIR /app
+
+# Copy the binary from builder
+COPY --from=builder /app/target/release/api_gateway /app/gateway
+
+# Copy configuration files
+COPY config ./config
+
+# Set ownership
+RUN chown -R rinova:rinova /app
+
+# Switch to non-root user
+USER rinova
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
+# Run the gateway
+CMD ["./gateway"]

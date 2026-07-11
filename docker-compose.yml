@@ -1,0 +1,351 @@
+version: '3.9'
+
+services:
+  # PostgreSQL - Relational Database
+  postgresql:
+    image: postgres:15-alpine
+    container_name: rinova-postgres
+    environment:
+      POSTGRES_DB: rinova
+      POSTGRES_USER: ${POSTGRES_USER:-rinova}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rinova_secret}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgresql_service/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - rinova-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rinova} -d rinova"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # MongoDB - Document Store
+  mongodb:
+    image: mongo:6.0
+    container_name: rinova-mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-rinova}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-rinova_secret}
+      MONGO_INITDB_DATABASE: rinova
+    volumes:
+      - mongo_data:/data/db
+      - ./docker/mongodb_service/init.js:/docker-entrypoint-initdb.d/init.js
+    ports:
+      - "27017:27017"
+    networks:
+      - rinova-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # Redis - Cache & Session Store
+  redis:
+    image: redis:7-alpine
+    container_name: rinova-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-rinova_redis_secret}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - rinova-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-rinova_redis_secret}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Hyperledger Besu - Private Blockchain Network
+  besu:
+    image: hyperledger/besu:latest
+    container_name: rinova-besu
+    volumes:
+      - besu_data:/opt/besu/data
+      - ./docker/hyperledger_besu_service:/opt/besu/config
+    ports:
+      - "8545:8545"   # JSON-RPC
+      - "8546:8546"   # WebSocket
+      - "30303:30303" # P2P
+    networks:
+      - rinova-network
+    command: >
+      --network=dev
+      --data-path=/opt/besu/data
+      --genesis-file=/opt/besu/config/genesis.json
+      --rpc-http-enabled
+      --rpc-http-port=8545
+      --rpc-http-cors-origins="*"
+      --rpc-http-api=ETH,NET,CLIQUE,DEBUG,MINER,NET,PERM,ADMIN,WEB3
+      --rpc-ws-enabled
+      --rpc-ws-port=8546
+      --rpc-ws-api=ETH,NET,CLIQUE
+      --host-allowlist="*"
+      --min-gas-price=0
+      --miner-enabled
+      --miner-coinbase=0xfe3b557e8fb62b89f4916b721be55ceb828dbd73
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8545"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ZeroMQ Publisher (Message Bus)
+  zmq-publisher:
+    image: python:3.11-alpine
+    container_name: rinova-zmq-pub
+    volumes:
+      - ./docker/zeroMQ_service/publisher.py:/app/publisher.py
+    ports:
+      - "5555:5555"
+      - "5556:5556"
+    networks:
+      - rinova-network
+    working_dir: /app
+    command: >
+      sh -c "pip install pyzmq && python publisher.py"
+    restart: unless-stopped
+
+  # API Gateway (Rust)
+  api-gateway:
+    build:
+      context: ./backend_rust
+      dockerfile: Dockerfile.gateway
+    container_name: rinova-gateway
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-rinova_jwt_secret_key_change_in_production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rinova}:${POSTGRES_PASSWORD:-rinova_secret}@postgresql:5432/rinova
+      USER_SERVICE_URL: http://user-service:8001
+      SUBSCRIPTION_SERVICE_URL: http://subscription-service:8002
+      PROJECT_SERVICE_URL: http://project-service:8003
+      PUBLISHING_SERVICE_URL: http://publishing-service:8004
+      BLOCKCHAIN_SERVICE_URL: http://blockchain-service:8005
+      NOTIFICATION_SERVICE_URL: http://notification-service:8006
+      REDIS_URL: redis://:${REDIS_PASSWORD:-rinova_redis_secret}@redis:6379
+      RUST_LOG: info
+    ports:
+      - "8080:8080"
+    networks:
+      - rinova-network
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # User Service (Rust)
+  user-service:
+    build:
+      context: ./backend_rust
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE_NAME: user_service
+    container_name: rinova-user-service
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rinova}:${POSTGRES_PASSWORD:-rinova_secret}@postgresql:5432/rinova
+      JWT_SECRET: ${JWT_SECRET:-rinova_jwt_secret_key_change_in_production}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      ZMQ_PUBLISHER_URL: tcp://zmq-publisher:5555
+      RUST_LOG: info
+    ports:
+      - "8001:8001"
+    networks:
+      - rinova-network
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      zmq-publisher:
+        condition: service_started
+    restart: unless-stopped
+
+  # Subscription Service (Rust)
+  subscription-service:
+    build:
+      context: ./backend_rust
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE_NAME: subscription_service
+    container_name: rinova-subscription-service
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rinova}:${POSTGRES_PASSWORD:-rinova_secret}@postgresql:5432/rinova
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      ZMQ_PUBLISHER_URL: tcp://zmq-publisher:5555
+      RUST_LOG: info
+    ports:
+      - "8002:8002"
+    networks:
+      - rinova-network
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      zmq-publisher:
+        condition: service_started
+    restart: unless-stopped
+
+  # Project Service (Rust)
+  project-service:
+    build:
+      context: ./backend_rust
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE_NAME: project_service
+    container_name: rinova-project-service
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rinova}:${POSTGRES_PASSWORD:-rinova_secret}@postgresql:5432/rinova
+      MONGODB_URI: mongodb://${MONGO_USER:-rinova}:${MONGO_PASSWORD:-rinova_secret}@mongodb:27017/rinova?authSource=admin
+      REDIS_URL: redis://:${REDIS_PASSWORD:-rinova_redis_secret}@redis:6379
+      ZMQ_PUBLISHER_URL: tcp://zmq-publisher:5555
+      RUST_LOG: info
+    ports:
+      - "8003:8003"
+    networks:
+      - rinova-network
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      zmq-publisher:
+        condition: service_started
+    restart: unless-stopped
+
+  # Publishing Service (Rust)
+  publishing-service:
+    build:
+      context: ./backend_rust
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE_NAME: publishing_service
+    container_name: rinova-publishing-service
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rinova}:${POSTGRES_PASSWORD:-rinova_secret}@postgresql:5432/rinova
+      MONGODB_URI: mongodb://${MONGO_USER:-rinova}:${MONGO_PASSWORD:-rinova_secret}@mongodb:27017/rinova?authSource=admin
+      IPFS_API_URL: ${IPFS_API_URL:-http://ipfs:5001}
+      HOSTING_S3_BUCKET: ${HOSTING_S3_BUCKET}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      ZMQ_PUBLISHER_URL: tcp://zmq-publisher:5555
+      RUST_LOG: info
+    ports:
+      - "8004:8004"
+    networks:
+      - rinova-network
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      zmq-publisher:
+        condition: service_started
+    restart: unless-stopped
+
+  # Blockchain Service (Rust)
+  blockchain-service:
+    build:
+      context: ./backend_rust
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE_NAME: blockchain_service
+    container_name: rinova-blockchain-service
+    environment:
+      BESU_RPC_URL: http://besu:8545
+      BESU_WS_URL: ws://besu:8546
+      PRIVATE_KEY: ${BESU_PRIVATE_KEY:-0x8f2a55949038a9610f50fb23b5883af3b4ecb3c3bb792cbcefbd1542c692be63}
+      OWNERSHIP_CONTRACT_ADDRESS: ${OWNERSHIP_CONTRACT_ADDRESS}
+      AUDIT_CONTRACT_ADDRESS: ${AUDIT_CONTRACT_ADDRESS}
+      ZMQ_PUBLISHER_URL: tcp://zmq-publisher:5555
+      RUST_LOG: info
+    ports:
+      - "8005:8005"
+    networks:
+      - rinova-network
+    depends_on:
+      besu:
+        condition: service_healthy
+      zmq-publisher:
+        condition: service_started
+    restart: unless-stopped
+
+  # Notification Service (Rust)
+  notification-service:
+    build:
+      context: ./backend_rust
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE_NAME: notification_service
+    container_name: rinova-notification-service
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rinova}:${POSTGRES_PASSWORD:-rinova_secret}@postgresql:5432/rinova
+      ZMQ_SUBSCRIBER_URL: tcp://zmq-publisher:5556
+      REDIS_URL: redis://:${REDIS_PASSWORD:-rinova_redis_secret}@redis:6379
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      RUST_LOG: info
+    ports:
+      - "8006:8006"
+    networks:
+      - rinova-network
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      zmq-publisher:
+        condition: service_started
+    restart: unless-stopped
+
+  # Frontend (Nuxt)
+  frontend:
+    build:
+      context: ./frontend_nuxt
+      dockerfile: Dockerfile
+    container_name: rinova-frontend
+    environment:
+      NUXT_PUBLIC_API_URL: ${API_URL:-http://localhost:8080}
+      NUXT_PUBLIC_WS_URL: ${WS_URL:-ws://localhost:8080}
+      NUXT_PUBLIC_SENTRY_DSN: ${SENTRY_DSN}
+    ports:
+      - "3000:3000"
+    networks:
+      - rinova-network
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+
+networks:
+  rinova-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  postgres_data:
+    driver: local
+  mongo_data:
+    driver: local
+  redis_data:
+    driver: local
+  besu_data:
+    driver: local

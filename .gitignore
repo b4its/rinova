@@ -1,0 +1,48 @@
+# Misc
+misc/
+.kiro/
+env
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Dependencies
+node_modules/
+vendor/
+
+# Build outputs
+dist/
+build/
+target/
+.output/
+.nuxt/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker volumes (persistent data)
+postgres_data/
+mongo_data/
+redis_data/
+besu_data/
+
+# Temporary files
+tmp/
+temp/
+*.tmp

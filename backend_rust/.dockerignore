@@ -1,0 +1,48 @@
+# Rust build artifacts (can be 1-2GB)
+target/
+**/target/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Test files
+**/tests/
+**/*.test.rs
+**/*.spec.rs
+
+# Coverage
+coverage/
+.coverage/
+
+# Temporary files
+tmp/
+temp/
+*.log
+
+# Docker files
+docker-compose*.yml
+Dockerfile*
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Kiro
+.kiro/

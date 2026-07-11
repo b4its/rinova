@@ -1,54 +1,87 @@
 # Rinova Website Builder - Rust Service Dockerfile
 # Multi-stage build for optimized production image
+# Note: For the full-featured Dockerfile, see docker/rust_service/Dockerfile
 
-# Build stage
+# =============================================================================
+# Stage 1: Builder - Compile Rust application
+# =============================================================================
 FROM rust:1.75-alpine AS builder
 
 # Install build dependencies
-RUN apk add --no-cache musl-dev pkgconfig openssl-dev
+# - musl-dev: Static linking for Alpine
+# - pkgconfig: Library configuration
+# - openssl-dev: SSL/TLS support
+RUN apk add --no-cache \
+    musl-dev \
+    pkgconfig \
+    openssl-dev \
+    openssl-libs-static
 
 WORKDIR /app
 
-# Copy Cargo files
+# Copy workspace configuration first (for better layer caching)
 COPY Cargo.toml Cargo.lock ./
-COPY src ./src
 
-# Build the service
+# Copy all workspace members
+COPY libs ./libs
+COPY services ./services
+
+# Build argument for service name
 ARG SERVICE_NAME
 ENV SERVICE_NAME=${SERVICE_NAME}
+
+# Build the service in release mode with optimizations
 RUN cargo build --release --bin ${SERVICE_NAME}
 
-# Production stage
-FROM alpine:3.19
+# =============================================================================
+# Stage 2: Runtime - Minimal production image
+# =============================================================================
+FROM alpine:3.19 AS runtime
 
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata
+# Install runtime dependencies only
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    curl
 
-# Create non-root user
+# Create non-root user for security
 RUN addgroup -S rinova && adduser -S rinova -G rinova
 
 WORKDIR /app
 
-# Copy the binary from builder
+# Build argument for service name and port
 ARG SERVICE_NAME
+ARG SERVICE_PORT=8000
+
+# Environment variables for service configuration
+# These can be overridden at runtime via docker-compose or k8s
+ENV SERVICE_NAME=${SERVICE_NAME} \
+    SERVICE_PORT=${SERVICE_PORT} \
+    SERVICE_HOST=0.0.0.0 \
+    RUST_LOG=info \
+    RUST_BACKTRACE=0 \
+    # Service discovery (override at runtime)
+    DATABASE_URL="" \
+    MONGODB_URI="" \
+    REDIS_URL="" \
+    ZMQ_PUBLISHER_URL="" \
+    JWT_SECRET=""
+
+# Copy the compiled binary from builder
 COPY --from=builder /app/target/release/${SERVICE_NAME} /app/service
 
-# Copy configuration files
-COPY config ./config
+# Create config directory and set ownership
+RUN mkdir -p /app/config && chown -R rinova:rinova /app
 
-# Set ownership
-RUN chown -R rinova:rinova /app
-
-# Switch to non-root user
+# Switch to non-root user for security
 USER rinova
 
-# Expose port
-ARG SERVICE_PORT=8000
+# Expose the service port
 EXPOSE ${SERVICE_PORT}
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:${SERVICE_PORT}/health || exit 1
+# Health check - uses curl to check /health endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:${SERVICE_PORT}/health || exit 1
 
-# Run the service
-CMD ["./service"]
+# Set entrypoint
+ENTRYPOINT ["/app/service"]

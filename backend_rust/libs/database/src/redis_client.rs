@@ -30,7 +30,7 @@ pub async fn set_cached<T: serde::Serialize>(
     conn: &mut redis::aio::Connection,
     key: &str,
     value: &T,
-    ttl_seconds: usize,
+    ttl_seconds: u64,
 ) -> Result<(), redis::RedisError> {
     let json = serde_json::to_string(value)
         .map_err(|_| redis::RedisError::from((redis::ErrorKind::TypeError, "Serialization error")))?;

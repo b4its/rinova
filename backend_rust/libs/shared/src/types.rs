@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
+use std::fmt;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct User {
     pub id: Uuid,
     pub email: String,
@@ -19,6 +20,27 @@ pub struct User {
 pub enum AccountType {
     Personal,
     Company,
+}
+
+impl fmt::Display for AccountType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AccountType::Personal => write!(f, "personal"),
+            AccountType::Company => write!(f, "company"),
+        }
+    }
+}
+
+impl std::str::FromStr for AccountType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "personal" => Ok(AccountType::Personal),
+            "company" => Ok(AccountType::Company),
+            _ => Err(format!("Unknown account type: {}", s)),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,7 +82,21 @@ pub enum Role {
     Member,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type)]
+impl Role {
+    pub fn can_manage_members(&self) -> bool {
+        matches!(self, Role::Owner | Role::Admin)
+    }
+
+    pub fn can_edit_projects(&self) -> bool {
+        matches!(self, Role::Owner | Role::Admin | Role::Member)
+    }
+
+    pub fn is_owner(&self) -> bool {
+        matches!(self, Role::Owner)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
 #[sqlx(type_name = "VARCHAR", rename_all = "lowercase")]
 pub enum InvitationStatus {
     Pending,

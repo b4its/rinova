@@ -10,3 +10,6 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
 validator = { workspace = true }
+actix-web = { workspace = true }
+sqlx = { workspace = true }
+regex = "1.10"

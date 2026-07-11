@@ -29,6 +29,7 @@ db.project_components.createIndex(
 );
 
 // Custom CSS Collection
+// Stores custom CSS with size tracking (max 100 KB per Requirement 20.8)
 db.custom_css.createIndex(
     { project_id: 1, css_scope: 1 },
     { unique: true, name: 'idx_project_scope' }
@@ -38,6 +39,35 @@ db.custom_css.createIndex(
     { project_id: 1, component_id: 1 },
     { name: 'idx_project_component' }
 );
+
+// Index for size tracking queries (find CSS exceeding limits)
+db.custom_css.createIndex(
+    { size_bytes: 1 },
+    { name: 'idx_size_bytes', partialFilterExpression: { size_bytes: { $gt: 102400 } } }
+);
+
+// Schema validation for custom_css (enforces size_bytes field and 100 KB limit)
+db.runCommand({
+    collMod: 'custom_css',
+    validator: {
+        $jsonSchema: {
+            bsonType: 'object',
+            required: ['project_id', 'css_scope', 'css_content', 'size_bytes'],
+            properties: {
+                project_id: { bsonType: 'string' },
+                css_scope: { enum: ['global', 'page', 'component'] },
+                css_content: { bsonType: 'string' },
+                size_bytes: { bsonType: 'int', minimum: 0, maximum: 102400 },
+                component_id: { bsonType: 'string' },
+                css_variables: { bsonType: 'object' },
+                created_at: { bsonType: 'date' },
+                updated_at: { bsonType: 'date' }
+            }
+        }
+    },
+    validationLevel: 'moderate',
+    validationAction: 'warn'
+});
 
 // Component Library (Asset Marketplace)
 db.component_library.createIndex(

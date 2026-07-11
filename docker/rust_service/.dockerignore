@@ -1,0 +1,73 @@
+# Rinova Rust Service Docker Build Context Ignore
+# Excludes unnecessary files to speed up build and reduce context size
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts (will be rebuilt in container)
+target/
+**/target/
+
+# Test files (not needed in production)
+tests/
+**/tests/
+**/*.test.rs
+**/*_test.rs
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Docker (prevent recursive build)
+docker/
+Dockerfile*
+docker-compose*.yml
+.docker/
+
+# Environment files (security)
+.env
+.env.*
+!.env.example
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Coverage reports
+coverage/
+.nyc_output/
+
+# Node modules (if any frontend assets)
+node_modules/
+
+# Python cache (if any scripts)
+__pycache__/
+*.py[cod]
+
+# Backup files
+*.bak
+*.backup

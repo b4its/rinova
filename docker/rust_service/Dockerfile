@@ -1,0 +1,145 @@
+# Rinova Website Builder - Rust Backend Services Dockerfile
+# Multi-stage build for optimized production image
+# Supports: user_service, subscription_service, project_service, 
+#            publishing_service, blockchain_service, notification_service, api_gateway
+
+# =============================================================================
+# Stage 1: Builder - Compile Rust application
+# =============================================================================
+FROM rust:1.75-alpine AS builder
+
+# Install build dependencies
+# - musl-dev: Static linking for Alpine
+# - pkgconfig: Library configuration
+# - openssl-dev: SSL/TLS support
+# - protobuf: For gRPC/protobuf compilation (if needed)
+RUN apk add --no-cache \
+    musl-dev \
+    pkgconfig \
+    openssl-dev \
+    openssl-libs-static \
+    protobuf
+
+# Set working directory
+WORKDIR /app
+
+# Copy workspace configuration first (for better layer caching)
+COPY Cargo.toml Cargo.lock ./
+
+# Copy all workspace members
+COPY libs ./libs
+COPY services ./services
+
+# Build argument for service name
+ARG SERVICE_NAME
+ENV SERVICE_NAME=${SERVICE_NAME}
+
+# Build the service in release mode with optimizations
+# Using target-cpu=native for maximum performance on the build machine
+RUN RUSTFLAGS="-C target-cpu=native" cargo build --release --bin ${SERVICE_NAME}
+
+# =============================================================================
+# Stage 2: Runtime - Minimal production image
+# =============================================================================
+FROM alpine:3.19 AS runtime
+
+# Install runtime dependencies only
+# - ca-certificates: TLS/SSL certificate validation
+# - tzdata: Timezone support
+# - curl: Health checks
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    curl
+
+# Create non-root user for security
+RUN addgroup -S rinova && adduser -S rinova -G rinova
+
+# Set working directory
+WORKDIR /app
+
+# Build argument for service name (passed from builder)
+ARG SERVICE_NAME
+ARG SERVICE_PORT=8000
+ARG SERVICE_TYPE=service
+
+# Environment variables for service configuration
+# These can be overridden at runtime
+ENV SERVICE_NAME=${SERVICE_NAME} \
+    SERVICE_PORT=${SERVICE_PORT} \
+    SERVICE_TYPE=${SERVICE_TYPE} \
+    RUST_LOG=info \
+    RUST_BACKTRACE=0 \
+    # Network configuration
+    SERVICE_HOST=0.0.0.0 \
+    # Database connection defaults (override in docker-compose)
+    DATABASE_URL="" \
+    MONGODB_URI="" \
+    REDIS_URL="" \
+    # Message bus
+    ZMQ_PUBLISHER_URL="" \
+    ZMQ_SUBSCRIBER_URL="" \
+    # Service discovery URLs
+    USER_SERVICE_URL="" \
+    SUBSCRIPTION_SERVICE_URL="" \
+    PROJECT_SERVICE_URL="" \
+    PUBLISHING_SERVICE_URL="" \
+    BLOCKCHAIN_SERVICE_URL="" \
+    NOTIFICATION_SERVICE_URL="" \
+    # Security
+    JWT_SECRET="" \
+    # Blockchain
+    BESU_RPC_URL="" \
+    BESU_WS_URL="" \
+    PRIVATE_KEY=""
+
+# Copy the compiled binary from builder
+COPY --from=builder /app/target/release/${SERVICE_NAME} /app/service
+
+# Create config directory for any configuration files
+RUN mkdir -p /app/config && chown -R rinova:rinova /app
+
+# Switch to non-root user for security
+USER rinova
+
+# Expose the service port
+EXPOSE ${SERVICE_PORT}
+
+# Health check configuration
+# Uses wget to check /health endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:${SERVICE_PORT}/health || exit 1
+
+# Set entrypoint
+ENTRYPOINT ["/app/service"]
+
+# =============================================================================
+# Stage 3: Development - For local development with hot reload
+# =============================================================================
+FROM rust:1.75-alpine AS development
+
+# Install development dependencies
+RUN apk add --no-cache \
+    musl-dev \
+    pkgconfig \
+    openssl-dev \
+    git
+
+WORKDIR /app
+
+# Copy source files
+COPY . .
+
+# Build argument for service name
+ARG SERVICE_NAME
+ENV SERVICE_NAME=${SERVICE_NAME} \
+    RUST_LOG=debug \
+    RUST_BACKTRACE=1
+
+# Expose port for development
+ARG SERVICE_PORT=8000
+EXPOSE ${SERVICE_PORT}
+
+# Run in development mode with cargo watch (if installed)
+# Falls back to cargo run if cargo-watch is not available
+CMD cargo run --bin ${SERVICE_NAME}

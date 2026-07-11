@@ -29,6 +29,7 @@ tracing-subscriber = { workspace = true }
 config = { workspace = true }
 dotenv = { workspace = true }
 lettre = { workspace = true }
+regex = { workspace = true }
 
 # Local dependencies
 shared = { path = "../../libs/shared" }

@@ -55,6 +55,15 @@ pub enum ServiceError {
     EmailError(String),
 }
 
+impl From<sqlx::Error> for ServiceError {
+    fn from(err: sqlx::Error) -> Self {
+        match err {
+            sqlx::Error::RowNotFound => ServiceError::NotFoundError("Resource not found".to_string()),
+            _ => ServiceError::DatabaseError(err.to_string()),
+        }
+    }
+}
+
 impl ResponseError for ServiceError {
     fn error_response(&self) -> HttpResponse {
         let error_code = self.to_code();

@@ -3,6 +3,7 @@ version: '3.9'
 services:
   # PostgreSQL - Relational Database
   postgresql:
+    profiles: ["full", "backend", "database"]
     image: postgres:15-alpine
     container_name: rinova-postgres
     environment:
@@ -11,7 +12,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rinova_secret}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgresql_service/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./docker/postgresql_service/init.sql:/docker-entrypoint-initdb.d/01_init.sql
+      - ./docker/postgresql_service/migrations:/docker-entrypoint-initdb.d/migrations
     ports:
       - "5432:5432"
     networks:
@@ -26,6 +28,7 @@ services:
 
   # MongoDB - Document Store
   mongodb:
+    profiles: ["full", "backend", "database"]
     image: mongo:6.0
     container_name: rinova-mongo
     environment:
@@ -49,6 +52,7 @@ services:
 
   # Redis - Cache & Session Store
   redis:
+    profiles: ["full", "backend", "database"]
     image: redis:7-alpine
     container_name: rinova-redis
     command: redis-server --requirepass ${REDIS_PASSWORD:-rinova_redis_secret}
@@ -66,43 +70,39 @@ services:
     restart: unless-stopped
 
   # Hyperledger Besu - Private Blockchain Network
+  # IBFT 2.0 consensus for Byzantine Fault Tolerance (Requirement 8.6)
+  # JSON-RPC and WebSocket endpoints for ownership verification (Requirement 8.1)
   besu:
+    profiles: ["full", "blockchain"]
     image: hyperledger/besu:latest
     container_name: rinova-besu
     volumes:
       - besu_data:/opt/besu/data
       - ./docker/hyperledger_besu_service:/opt/besu/config
     ports:
-      - "8545:8545"   # JSON-RPC
-      - "8546:8546"   # WebSocket
-      - "30303:30303" # P2P
+      - "8545:8545"   # JSON-RPC (synchronous operations)
+      - "8546:8546"   # WebSocket (real-time events)
+      - "30303:30303" # P2P (node discovery and block sync)
+      - "9545:9545"   # Metrics (Prometheus monitoring)
     networks:
-      - rinova-network
+      rinova-network:
+        aliases:
+          - besu
+    environment:
+      - BESU_LOGGING=INFO
     command: >
-      --network=dev
-      --data-path=/opt/besu/data
-      --genesis-file=/opt/besu/config/genesis.json
-      --rpc-http-enabled
-      --rpc-http-port=8545
-      --rpc-http-cors-origins="*"
-      --rpc-http-api=ETH,NET,CLIQUE,DEBUG,MINER,NET,PERM,ADMIN,WEB3
-      --rpc-ws-enabled
-      --rpc-ws-port=8546
-      --rpc-ws-api=ETH,NET,CLIQUE
-      --host-allowlist="*"
-      --min-gas-price=0
-      --miner-enabled
-      --miner-coinbase=0xfe3b557e8fb62b89f4916b721be55ceb828dbd73
+      --config-file=/opt/besu/config/config.toml
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8545"]
+      test: ["CMD-SHELL", "curl -f -X POST -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}' http://localhost:8545 || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 60s
     restart: unless-stopped
 
   # ZeroMQ Publisher (Message Bus)
   zmq-publisher:
+    profiles: ["full", "backend"]
     image: python:3.11-alpine
     container_name: rinova-zmq-pub
     volumes:
@@ -119,6 +119,7 @@ services:
 
   # API Gateway (Rust)
   api-gateway:
+    profiles: ["full", "backend"]
     build:
       context: ./backend_rust
       dockerfile: Dockerfile.gateway
@@ -147,6 +148,7 @@ services:
 
   # User Service (Rust)
   user-service:
+    profiles: ["full", "backend"]
     build:
       context: ./backend_rust
       dockerfile: Dockerfile.service
@@ -175,6 +177,7 @@ services:
 
   # Subscription Service (Rust)
   subscription-service:
+    profiles: ["full", "backend"]
     build:
       context: ./backend_rust
       dockerfile: Dockerfile.service
@@ -200,6 +203,7 @@ services:
 
   # Project Service (Rust)
   project-service:
+    profiles: ["full", "backend"]
     build:
       context: ./backend_rust
       dockerfile: Dockerfile.service
@@ -229,6 +233,7 @@ services:
 
   # Publishing Service (Rust)
   publishing-service:
+    profiles: ["full", "backend"]
     build:
       context: ./backend_rust
       dockerfile: Dockerfile.service
@@ -259,6 +264,7 @@ services:
 
   # Blockchain Service (Rust)
   blockchain-service:
+    profiles: ["full", "blockchain"]
     build:
       context: ./backend_rust
       dockerfile: Dockerfile.service
@@ -286,6 +292,7 @@ services:
 
   # Notification Service (Rust)
   notification-service:
+    profiles: ["full", "backend"]
     build:
       context: ./backend_rust
       dockerfile: Dockerfile.service
@@ -316,20 +323,39 @@ services:
 
   # Frontend (Nuxt)
   frontend:
+    profiles: ["full", "frontend"]
     build:
       context: ./frontend_nuxt
       dockerfile: Dockerfile
+      target: production
+      args:
+        NUXT_PUBLIC_API_URL: ${API_URL:-http://localhost:8080}
+        NUXT_PUBLIC_WS_URL: ${WS_URL:-ws://localhost:8080}
+        NUXT_PUBLIC_SENTRY_DSN: ${SENTRY_DSN:-}
+        NUXT_PUBLIC_CDN_URL: ${CDN_URL:-}
     container_name: rinova-frontend
     environment:
+      # Runtime environment variables (override build-time defaults)
       NUXT_PUBLIC_API_URL: ${API_URL:-http://localhost:8080}
       NUXT_PUBLIC_WS_URL: ${WS_URL:-ws://localhost:8080}
-      NUXT_PUBLIC_SENTRY_DSN: ${SENTRY_DSN}
+      NUXT_PUBLIC_SENTRY_DSN: ${SENTRY_DSN:-}
+      NUXT_PUBLIC_CDN_URL: ${CDN_URL:-}
+      NUXT_HOST: 0.0.0.0
+      NUXT_PORT: 3000
+      NODE_ENV: production
     ports:
       - "3000:3000"
     networks:
       - rinova-network
     depends_on:
-      - api-gateway
+      api-gateway:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
 
 networks:

@@ -26,6 +26,7 @@ struct NotificationDocument {
 }
 
 /// Notification store for MongoDB
+#[derive(Clone)]
 pub struct NotificationStore {
     collection: Collection<NotificationDocument>,
 }
@@ -33,7 +34,7 @@ pub struct NotificationStore {
 impl NotificationStore {
     /// Create a new notification store
     pub async fn new(mongodb_uri: &str, database_name: &str) -> Result<Self> {
-        let client = Client::new(mongodb_uri)
+        let client = Client::with_uri_str(mongodb_uri)
             .await
             .context("Failed to connect to MongoDB")?;
 
@@ -46,6 +47,7 @@ impl NotificationStore {
                 mongodb::IndexModel::builder()
                     .keys(doc! { "user_id": 1, "created_at": -1 })
                     .build(),
+                None,
             )
             .await?;
 
@@ -54,6 +56,7 @@ impl NotificationStore {
                 mongodb::IndexModel::builder()
                     .keys(doc! { "user_id": 1, "read": 1 })
                     .build(),
+                None,
             )
             .await?;
 
@@ -75,7 +78,7 @@ impl NotificationStore {
         };
 
         self.collection
-            .insert_one(&doc)
+            .insert_one(&doc, None)
             .await
             .context("Failed to store notification")?;
 
@@ -93,7 +96,7 @@ impl NotificationStore {
 
         // Count total
         let total = self.collection
-            .count_documents(doc! { "user_id": user_id.to_string() })
+            .count_documents(doc! { "user_id": user_id.to_string() }, None)
             .await?;
 
         // Count unread
@@ -101,16 +104,21 @@ impl NotificationStore {
             .count_documents(doc! {
                 "user_id": user_id.to_string(),
                 "read": false
-            })
+            }, None)
             .await?;
 
-        // Fetch notifications
-        let mut cursor = self.collection
-            .find(doc! { "user_id": user_id.to_string() })
+        // Fetch notifications with options
+        use mongodb::options::FindOptions;
+        let find_options = FindOptions::builder()
             .sort(doc! { "created_at": -1 })
             .skip(skip)
             .limit(page_size as i64)
-            .await?;
+            .build();
+
+        let mut cursor = self.collection
+            .find(doc! { "user_id": user_id.to_string() }, find_options)
+            .await
+            .context("Failed to fetch notifications")?;
 
         let mut notifications = Vec::new();
         while cursor.advance().await? {
@@ -150,6 +158,7 @@ impl NotificationStore {
                     "notification_id": { "$in": ids }
                 },
                 doc! { "$set": { "read": true } },
+                None,
             )
             .await?;
 
@@ -159,11 +168,12 @@ impl NotificationStore {
     /// Delete old notifications (retention policy: 30 days)
     pub async fn cleanup_old_notifications(&self) -> Result<u64> {
         let cutoff = Utc::now() - chrono::Duration::days(30);
+        let cutoff_bson = mongodb::bson::DateTime::from_millis(cutoff.timestamp_millis());
 
         let result = self.collection
             .delete_many(doc! {
-                "created_at": { "$lt": cutoff }
-            })
+                "created_at": { "$lt": cutoff_bson }
+            }, None)
             .await?;
 
         Ok(result.deleted_count)
@@ -175,7 +185,7 @@ impl NotificationStore {
             .count_documents(doc! {
                 "user_id": user_id.to_string(),
                 "read": false
-            })
+            }, None)
             .await?;
 
         Ok(count)

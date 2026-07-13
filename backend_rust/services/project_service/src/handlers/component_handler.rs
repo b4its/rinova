@@ -3,7 +3,7 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use uuid::Uuid;
 
-use crate::models::{AddComponentRequest, UpdateComponentRequest};
+use crate::models::{AddComponentRequest, UpdateComponentRequest, MoveComponentRequest};
 use crate::repository::{ComponentRepository, ProjectRepository};
 
 /// Extract user ID from request headers (set by API Gateway)

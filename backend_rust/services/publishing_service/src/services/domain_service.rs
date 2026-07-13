@@ -11,6 +11,7 @@ use crate::models::{
 };
 
 /// Domain service for custom domain management
+#[derive(Clone)]
 pub struct DomainService {
     db: Option<PgPool>,
     max_domains_per_project: u32,

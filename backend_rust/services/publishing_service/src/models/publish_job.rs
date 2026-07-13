@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Publish job status
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "text", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum PublishStatus {
     /// Job is pending
@@ -33,7 +34,7 @@ impl std::fmt::Display for PublishStatus {
 }
 
 /// Publish job record
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct PublishJob {
     /// Unique job ID
     pub id: Uuid,
@@ -44,9 +45,9 @@ pub struct PublishJob {
     /// Current status
     pub status: PublishStatus,
     /// Number of retry attempts
-    pub retry_count: u32,
+    pub retry_count: i32,
     /// Maximum retries allowed
-    pub max_retries: u32,
+    pub max_retries: i32,
     /// Error message if failed
     pub error_message: Option<String>,
     /// Error details (JSON)
@@ -71,8 +72,8 @@ impl PublishJob {
             project_id,
             user_id,
             status: PublishStatus::Pending,
-            retry_count: 0,
-            max_retries: 3,
+            retry_count: 0i32,
+            max_retries: 3i32,
             error_message: None,
             error_details: None,
             live_url: None,
@@ -191,7 +192,7 @@ mod tests {
         let mut job = PublishJob::new(Uuid::new_v4(), Uuid::new_v4());
         assert!(job.can_retry());
 
-        job.retry_count = 3;
+        job.retry_count = 3i32;
         assert!(!job.can_retry());
     }
 }

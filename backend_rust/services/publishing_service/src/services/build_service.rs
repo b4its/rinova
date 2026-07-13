@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::models::{BuildResult, ValidationIssue, ValidationResult};
 
 /// Build service for creating website bundles
+#[derive(Clone)]
 pub struct BuildService {
     /// Maximum bundle size (50MB)
     max_bundle_size: u64,

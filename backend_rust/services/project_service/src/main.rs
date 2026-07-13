@@ -85,9 +85,12 @@ async fn main() -> std::io::Result<()> {
     let project_repo = ProjectRepository::new(pg_pool.clone());
 
     // Connect to MongoDB and create component repository
-    let component_repo = ComponentRepository::new(&mongodb_uri, &mongodb_database)
-        .await
-        .expect("Failed to create component repository");
+    // Note: ComponentRepository is created once and cloned for each worker
+    let component_repo = std::sync::Arc::new(
+        ComponentRepository::new(&mongodb_uri, &mongodb_database)
+            .await
+            .expect("Failed to create component repository")
+    );
 
     tracing::info!("Connected to MongoDB");
 
@@ -99,7 +102,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(Cors::permissive())
             .app_data(web::Data::new(project_repo.clone()))
-            .app_data(web::Data::new(component_repo.clone()))
+            .app_data(web::Data::from(component_repo.clone()))
             .route("/health", web::get().to(health))
             .service(
                 web::scope("/api/v1/projects")

@@ -1,0 +1,20 @@
+[package]
+name = "rinova-tests"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[test]]
+name = "property_tests"
+path = "property_tests.rs"
+
+[[test]]
+name = "integration_tests"
+path = "integration_tests.rs"
+
+[dependencies]
+uuid = { workspace = true }
+chrono = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }

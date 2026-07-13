@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use actix_web::{dev::ServiceRequest, Error, HttpResponse};
+use actix_web::{Error, HttpResponse};
 use tokio::sync::RwLock;
 
 /// Rate limiter configuration
@@ -113,6 +113,7 @@ pub enum RateLimitResult {
 }
 
 /// Rate limit middleware
+#[derive(Clone)]
 pub struct RateLimitMiddleware {
     store: RateLimitStore,
 }

@@ -17,9 +17,8 @@
 //! - /api/v1/blockchain/*    → Blockchain Service
 
 use actix_cors::Cors;
-use actix_web::{middleware, web, App, HttpServer, HttpRequest, HttpResponse};
+use actix_web::{web, App, HttpServer, HttpRequest, HttpResponse};
 use dotenv::dotenv;
-use std::sync::Arc;
 
 mod config;
 mod middleware;
@@ -78,7 +77,7 @@ async fn proxy_handler(
 
     // Skip auth for health endpoint
     if path == "/health" {
-        return health(config, proxy).await.into();
+        return HttpResponse::Ok().json(health(config, proxy).await.0);
     }
 
     // Skip auth for certain endpoints
@@ -181,7 +180,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .wrap(Cors::permissive())
-            .wrap(middleware::Logger::default())
+            .wrap(tracing_actix_web::TracingLogger::default())
             .app_data(web::Data::new(config.clone()))
             .app_data(web::Data::new(proxy.clone()))
             .app_data(web::Data::new(rate_limiter.clone()))

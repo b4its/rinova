@@ -12,6 +12,7 @@ pub fn compute_hash(content: &[u8]) -> String {
 }
 
 /// Hash service for content verification
+#[derive(Clone)]
 pub struct HashService;
 
 impl HashService {

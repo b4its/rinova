@@ -166,6 +166,15 @@ pub struct UpdateComponentRequest {
     pub animations: Option<Vec<AnimationConfig>>,
 }
 
+/// Request to move a component
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MoveComponentRequest {
+    /// New parent component ID (None for root)
+    pub new_parent_id: Option<String>,
+    /// New position among siblings (None to append)
+    pub new_position: Option<usize>,
+}
+
 /// Response for component operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentResponse {

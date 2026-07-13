@@ -54,6 +54,7 @@ impl BlockchainConfig {
 }
 
 /// Blockchain client for Hyperledger Besu
+#[derive(Clone)]
 pub struct BlockchainClient {
     config: BlockchainConfig,
     // Note: In production, this would hold the ethers::providers::Provider

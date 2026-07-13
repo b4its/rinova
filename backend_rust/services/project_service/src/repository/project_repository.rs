@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::models::{Project, ProjectListQuery, ProjectListResponse, ProjectStatus, PublishedSite, UpdateProjectRequest};
 
 /// Repository for project CRUD operations
+#[derive(Clone)]
 pub struct ProjectRepository {
     pool: PgPool,
 }
@@ -119,21 +120,21 @@ impl ProjectRepository {
 
     /// Update a project
     pub async fn update(&self, id: Uuid, request: UpdateProjectRequest) -> Result<Project> {
-        let mut updates = vec!["updated_at = NOW()"];
+        let mut updates: Vec<String> = vec!["updated_at = NOW()".to_string()];
         let mut param_count = 2;
 
         if request.name.is_some() {
-            updates.push(&format!("name = ${}", param_count));
+            updates.push(format!("name = ${}", param_count));
             param_count += 1;
         }
 
         if request.status.is_some() {
-            updates.push(&format!("status = ${}", param_count));
+            updates.push(format!("status = ${}", param_count));
             param_count += 1;
         }
 
         if request.metadata.is_some() {
-            updates.push(&format!("metadata = ${}", param_count));
+            updates.push(format!("metadata = ${}", param_count));
             param_count += 1;
         }
 

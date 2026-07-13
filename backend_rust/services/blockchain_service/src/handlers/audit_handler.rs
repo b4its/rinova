@@ -110,10 +110,13 @@ pub async fn verify_audit(
                 HttpResponse::Ok().json(verification)
             } else {
                 // Hash mismatch - show warning
-                HttpResponse::Ok().json(serde_json::json!({
-                    ...serde_json::to_value(&verification).unwrap(),
-                    "warning": "Content hash does not match blockchain record. Website may have been modified without authorization."
-                }))
+                let mut response = serde_json::to_value(&verification).unwrap();
+                if let Some(obj) = response.as_object_mut() {
+                    obj.insert("warning".to_string(), serde_json::json!(
+                        "Content hash does not match blockchain record. Website may have been modified without authorization."
+                    ));
+                }
+                HttpResponse::Ok().json(response)
             }
         }
         Err(e) => {

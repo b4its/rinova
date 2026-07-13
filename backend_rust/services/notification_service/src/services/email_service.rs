@@ -41,6 +41,7 @@ impl EmailConfig {
 }
 
 /// Email service for sending notifications
+#[derive(Clone)]
 pub struct EmailService {
     config: EmailConfig,
     mailer: Option<SmtpTransport>,
@@ -92,7 +93,7 @@ The Rinova Team
             role, workspace_id
         );
 
-        self.send_email(to_email, subject, &body).await
+        self.send_email(to_email, &subject, &body).await
     }
 
     /// Send a publish confirmation email
@@ -117,7 +118,7 @@ The Rinova Team
             project_name, url
         );
 
-        self.send_email(to_email, subject, &body).await
+        self.send_email(to_email, &subject, &body).await
     }
 
     /// Send a generic email

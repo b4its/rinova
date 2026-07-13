@@ -97,6 +97,7 @@ impl HashResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Datelike;
 
     #[test]
     fn test_audit_record_timestamp() {

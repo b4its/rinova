@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::models::{AddComponentRequest, ComponentNode, ProjectComponents, UpdateComponentRequest};
 
 /// Repository for component CRUD operations in MongoDB
+#[derive(Clone)]
 pub struct ComponentRepository {
     collection: Collection<ProjectComponents>,
 }
@@ -17,7 +18,7 @@ pub struct ComponentRepository {
 impl ComponentRepository {
     /// Create a new component repository
     pub async fn new(mongodb_uri: &str, database_name: &str) -> Result<Self> {
-        let client = Client::new(mongodb_uri)
+        let client = Client::with_uri_str(mongodb_uri)
             .await
             .context("Failed to connect to MongoDB")?;
 
@@ -30,6 +31,7 @@ impl ComponentRepository {
                 mongodb::IndexModel::builder()
                     .keys(doc! { "project_id": 1 })
                     .build(),
+                None,
             )
             .await?;
 
@@ -38,6 +40,7 @@ impl ComponentRepository {
                 mongodb::IndexModel::builder()
                     .keys(doc! { "workspace_id": 1 })
                     .build(),
+                None,
             )
             .await?;
 
@@ -50,7 +53,7 @@ impl ComponentRepository {
 
         let result = self
             .collection
-            .insert_one(&document)
+            .insert_one(&document, None)
             .await?;
 
         let mut document = document;
@@ -65,7 +68,7 @@ impl ComponentRepository {
 
         let document = self
             .collection
-            .find_one(filter)
+            .find_one(filter, None)
             .await?;
 
         Ok(document)
@@ -120,7 +123,7 @@ impl ComponentRepository {
 
         // Save back to database
         self.collection
-            .replace_one(filter, &document)
+            .replace_one(filter, &document, None)
             .await?;
 
         Ok(component)
@@ -140,22 +143,24 @@ impl ComponentRepository {
             .await?
             .context("Project components document not found")?;
 
-        let component = document
-            .components
-            .get_mut(component_id)
-            .context("Component not found")?;
+        {
+            let component = document
+                .components
+                .get_mut(component_id)
+                .context("Component not found")?;
 
-        // Apply updates
-        if let Some(props) = request.props {
-            component.props = props;
-        }
+            // Apply updates
+            if let Some(props) = request.props {
+                component.props = props;
+            }
 
-        if let Some(styles) = request.styles {
-            component.styles = styles;
-        }
+            if let Some(styles) = request.styles {
+                component.styles = styles;
+            }
 
-        if let Some(animations) = request.animations {
-            component.animations = animations;
+            if let Some(animations) = request.animations {
+                component.animations = animations;
+            }
         }
 
         // Update version and timestamp
@@ -164,10 +169,13 @@ impl ComponentRepository {
 
         // Save back to database
         self.collection
-            .replace_one(filter, &document)
+            .replace_one(filter, &document, None)
             .await?;
 
-        Ok(component.clone())
+        // Return the updated component
+        let component = document.components.get(component_id).cloned()
+            .context("Component not found after update")?;
+        Ok(component)
     }
 
     /// Delete a component and its children
@@ -193,15 +201,15 @@ impl ComponentRepository {
         }
 
         // Remove from parent's children list
-        if let Some(component) = document.components.get(component_id) {
-            if let Some(ref parent_id) = component.parent_id {
-                if let Some(parent) = document.components.get_mut(parent_id) {
-                    parent.children.retain(|id| id != component_id);
-                }
-            } else {
-                // Remove from root
-                document.root_ids.retain(|id| id != component_id);
+        let parent_id_to_update = document.components.get(component_id).and_then(|c| c.parent_id.clone());
+        
+        if let Some(parent_id) = parent_id_to_update {
+            if let Some(parent) = document.components.get_mut(&parent_id) {
+                parent.children.retain(|id| id != component_id);
             }
+        } else {
+            // Remove from root
+            document.root_ids.retain(|id| id != component_id);
         }
 
         // Remove all components
@@ -215,7 +223,7 @@ impl ComponentRepository {
 
         // Save back to database
         self.collection
-            .replace_one(filter, &document)
+            .replace_one(filter, &document, None)
             .await?;
 
         Ok(to_delete)
@@ -279,7 +287,7 @@ impl ComponentRepository {
 
         // Save back to database
         self.collection
-            .replace_one(filter, &document)
+            .replace_one(filter, &document, None)
             .await?;
 
         // Return updated component
@@ -291,7 +299,7 @@ impl ComponentRepository {
         let filter = doc! { "project_id": project_id.to_string() };
 
         self.collection
-            .delete_one(filter)
+            .delete_one(filter, None)
             .await?;
 
         Ok(())

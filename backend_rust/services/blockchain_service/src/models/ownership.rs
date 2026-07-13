@@ -94,6 +94,7 @@ pub struct OwnershipTransferEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Datelike;
 
     #[test]
     fn test_ownership_record_timestamp() {

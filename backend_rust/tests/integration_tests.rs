@@ -87,7 +87,7 @@ mod tests {
 
     // Project Service Tests
     mod project_service {
-        use super::*;
+        use uuid::Uuid;
 
         #[test]
         fn test_project_status() {
@@ -178,8 +178,24 @@ mod tests {
         }
 
         fn is_valid_domain(domain: &str) -> bool {
-            let domain_regex = regex::Regex::new(r"^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$").unwrap();
-            domain_regex.is_match(domain) && domain.len() <= 253
+            // Simple domain validation without regex
+            if domain.is_empty() || domain.len() > 253 {
+                return false;
+            }
+            
+            let parts: Vec<&str> = domain.split('.').collect();
+            if parts.len() < 2 {
+                return false;
+            }
+            
+            // Check each part
+            for part in &parts {
+                if part.is_empty() || part.starts_with('-') || part.ends_with('-') {
+                    return false;
+                }
+            }
+            
+            true
         }
 
         #[test]

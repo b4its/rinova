@@ -7,6 +7,7 @@ use crate::models::{Event, Notification, NotificationType};
 use super::{NotificationStore, EmailService, WebSocketManager};
 
 /// Notification service for orchestrating notifications
+#[derive(Clone)]
 pub struct NotificationService {
     store: NotificationStore,
     email_service: EmailService,

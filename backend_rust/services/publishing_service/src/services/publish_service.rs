@@ -8,6 +8,7 @@ use crate::models::{PublishJob, PublishRequest, PublishStatus, PublishStatusResp
 use super::{BuildService, DomainService};
 
 /// Publish service for orchestrating the publish workflow
+#[derive(Clone)]
 pub struct PublishService {
     db: PgPool,
     build_service: BuildService,
@@ -126,8 +127,7 @@ impl PublishService {
         )
         .bind(job_id)
         .fetch_optional(&self.db)
-        .await?
-        .context("Failed to fetch job")?;
+        .await?;
 
         Ok(job.map(|j| {
             let progress = match j.status {

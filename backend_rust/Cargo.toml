@@ -12,6 +12,7 @@ members = [
     "libs/shared",
     "libs/database",
     "libs/messaging",
+    "tests",
 ]
 
 [workspace.package]
@@ -87,3 +88,7 @@ futures = "0.3"
 
 # Regex
 regex = "1.10"
+
+# Hashing
+sha2 = "0.10"
+hex = "0.4"

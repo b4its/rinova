@@ -3,8 +3,10 @@
 # as required by Requirement 8.6 for node failure handling
 
 # Network Configuration
-network="rinova-private"
-bootnodes=["enode://fe3b557e8fb62b89f4916b721be55ceb828dbd73@besu:30303?discport=30303"]
+# NOTE: Do NOT set `network=` for a private chain — that option only accepts
+# Besu's built-in network names (mainnet, sepolia, dev, ...). The private
+# network is defined entirely by `genesis-file` below.
+# Bootnodes disabled for a single-node dev network (no peers to discover).
 
 # Genesis file for private network
 genesis-file="/opt/besu/config/genesis.json"
@@ -29,7 +31,7 @@ rpc-http-enabled=true
 rpc-http-host="0.0.0.0"
 rpc-http-port=8545
 rpc-http-cors-origins=["*"]
-rpc-http-api=["ETH","NET","WEB3","CLIQUE","IBFT","ADMIN","DEBUG","MINER","EEA","PRIV","PERM"]
+rpc-http-api=["ETH","NET","WEB3","IBFT","ADMIN","DEBUG","MINER","PERM","TXPOOL"]
 rpc-http-authentication-enabled=false
 rpc-http-max-active-connections=1000
 rpc-http-max-batch-size=50
@@ -39,7 +41,7 @@ rpc-http-max-request-content-length=52428800
 rpc-ws-enabled=true
 rpc-ws-host="0.0.0.0"
 rpc-ws-port=8546
-rpc-ws-api=["ETH","NET","WEB3","CLIQUE","IBFT"]
+rpc-ws-api=["ETH","NET","WEB3","IBFT"]
 rpc-ws-authentication-enabled=false
 rpc-ws-max-frame-size=1048576
 rpc-ws-max-active-connections=500
@@ -53,13 +55,8 @@ metrics-host="0.0.0.0"
 metrics-port=9545
 metrics-protocol="prometheus"
 
-# Mining Configuration (IBFT 2.0 validator)
-miner-enabled=true
-miner-coinbase="0xfe3b557e8fb62b89f4916b721be55ceb828dbd73"
+# Mining Configuration
 min-gas-price=0
-
-# Privacy Configuration (for permissioned network)
-privacy-enabled=false
 
 # Permissions Configuration
 permissions-nodes-config-file-enabled=false
@@ -68,10 +65,7 @@ permissions-accounts-config-file-enabled=false
 # Logging Configuration
 logging="INFO"
 
-# Transaction Pool
-tx-pool-max-size=10000
-tx-pool-hashes-max-size=15000
-tx-pool-retention-hours=999
+# Transaction Pool (uses Besu's default "layered" implementation)
 
 # Performance Tuning
 auto-log-bloom-caching-enabled=true

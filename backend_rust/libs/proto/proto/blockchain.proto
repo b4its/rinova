@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package blockchain;
+
+// Blockchain service exposed over gRPC for internal service-to-service calls
+// (e.g. subscription_service records subscription transactions on-chain).
+service BlockchainService {
+  // Record a subscription transaction on-chain.
+  rpc RecordSubscription(RecordSubscriptionRequest) returns (SubscriptionRecord);
+  // Fetch a user's subscription transaction history.
+  rpc GetSubscriptionHistory(GetSubscriptionHistoryRequest) returns (SubscriptionHistory);
+}
+
+message RecordSubscriptionRequest {
+  string user_id = 1;
+  string subscription_id = 2;
+  string plan_type = 3;
+  string action = 4;
+  int64 amount_cents = 5;
+  string currency = 6;
+  optional string payment_reference = 7;
+}
+
+message SubscriptionRecord {
+  string user_id = 1;
+  string subscription_id = 2;
+  string plan_type = 3;
+  string action = 4;
+  int64 amount_cents = 5;
+  string currency = 6;
+  optional string payment_reference = 7;
+  string content_hash = 8;
+  string tx_hash = 9;
+  uint64 block_number = 10;
+  int64 timestamp = 11;
+}
+
+message GetSubscriptionHistoryRequest {
+  string user_id = 1;
+  uint64 limit = 2;
+}
+
+message SubscriptionHistory {
+  string user_id = 1;
+  repeated SubscriptionRecord records = 2;
+  uint64 total = 3;
+}

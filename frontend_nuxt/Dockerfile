@@ -1,88 +1,63 @@
-# Rinova Website Builder - Nuxt Frontend Dockerfile
-# Multi-stage build for optimized production SSR deployment
+# Rinova Frontend (Nuxt 4) - Multi-stage build using pnpm
+# Produces a minimal Node runtime image serving the Nitro server output.
 
 # =============================================================================
-# Stage 1: Dependencies - Install npm packages
+# Stage 1: Base - Node + pnpm via corepack
 # =============================================================================
-FROM node:20-alpine AS deps
-
-# Install build dependencies for native modules
-RUN apk add --no-cache python3 make g++
-
+FROM node:22-alpine AS base
+RUN corepack enable && corepack prepare pnpm@11.10.0 --activate
 WORKDIR /app
 
-# Copy package files first for better layer caching
-COPY package.json package-lock.json* ./
-
-# Install dependencies with ci for reproducible builds
-RUN npm ci --prefer-offline --no-audit || npm install
+# =============================================================================
+# Stage 2: Dependencies - install with a cached pnpm store
+# =============================================================================
+FROM base AS deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml* ./
+# Note: no BuildKit cache mount here — the classic Docker builder is in use.
+RUN pnpm install --frozen-lockfile
 
 # =============================================================================
-# Stage 2: Builder - Build the Nuxt application
+# Stage 3: Builder - compile the Nuxt app
 # =============================================================================
-FROM node:20-alpine AS builder
+FROM base AS builder
 
-WORKDIR /app
-
-# Copy dependencies from deps stage
-COPY --from=deps /app/node_modules ./node_modules
-
-# Copy source files
-COPY . .
-
-# Build arguments for environment injection at build time
+# Build-time public config (baked into the client bundle)
 ARG NUXT_PUBLIC_API_URL=http://localhost:8080
 ARG NUXT_PUBLIC_WS_URL=ws://localhost:8080
-
-# Set environment variables for build
+ARG NUXT_PUBLIC_SENTRY_DSN=
+ARG NUXT_PUBLIC_CDN_URL=
 ENV NUXT_PUBLIC_API_URL=${NUXT_PUBLIC_API_URL} \
     NUXT_PUBLIC_WS_URL=${NUXT_PUBLIC_WS_URL} \
-    NODE_ENV=production
+    NUXT_PUBLIC_SENTRY_DSN=${NUXT_PUBLIC_SENTRY_DSN} \
+    NUXT_PUBLIC_CDN_URL=${NUXT_PUBLIC_CDN_URL}
 
-# Build the Nuxt application
-RUN npm run build
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN pnpm build
 
 # =============================================================================
-# Stage 3: Production - Minimal runtime image
+# Stage 4: Production - minimal runtime with only the built output
 # =============================================================================
-FROM node:20-alpine AS production
-
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata curl
-
-# Create non-root user for security
-RUN addgroup -S rinova && adduser -S rinova -G rinova
-
+FROM node:22-alpine AS production
 WORKDIR /app
 
-# Copy built application from builder
-COPY --from=builder /app/.output ./.output
-COPY --from=builder /app/package.json ./package.json
+# curl is used by the docker-compose healthcheck
+RUN apk add --no-cache curl \
+    && addgroup -S rinova && adduser -S rinova -G rinova
 
-# Create directory for static assets
-RUN mkdir -p /app/.output/public && \
-    chown -R rinova:rinova /app
+ENV NODE_ENV=production \
+    NUXT_HOST=0.0.0.0 \
+    NUXT_PORT=3000 \
+    NITRO_HOST=0.0.0.0 \
+    NITRO_PORT=3000
 
-# Switch to non-root user
+# The Nitro build output is fully self-contained (bundled node_modules).
+COPY --from=builder --chown=rinova:rinova /app/.output ./.output
+
 USER rinova
-
-# Expose port 3000 for SSR server
 EXPOSE 3000
 
-# Environment variables for runtime configuration
-ENV NUXT_HOST=0.0.0.0 \
-    NUXT_PORT=3000 \
-    NODE_ENV=production
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
 
-# Health check for SSR server
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:3000/ || exit 1
-
-# Labels for container metadata
-LABEL maintainer="Rinova Team" \
-      service="nuxt-frontend" \
-      description="Rinova Website Builder - Nuxt SSR Frontend" \
-      version="1.0.0"
-
-# Run the Nuxt SSR server
 CMD ["node", ".output/server/index.mjs"]

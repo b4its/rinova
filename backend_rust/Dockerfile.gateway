@@ -15,16 +15,20 @@ RUN apk add --no-cache \
     openssl-libs-static \
     g++ \
     zeromq-dev \
-    cmake
+    cmake \
+    protoc \
+    protobuf-dev
 
 WORKDIR /app
 
 # Copy workspace configuration first (for better layer caching)
 COPY Cargo.toml Cargo.lock ./
 
-# Copy all workspace members
+# Copy all workspace members (tests/ is a workspace member declared in
+# Cargo.toml, so it must be present for cargo to resolve the workspace).
 COPY libs ./libs
 COPY services ./services
+COPY tests ./tests
 
 # Build the API Gateway in release mode
 RUN cargo build --release --bin api_gateway

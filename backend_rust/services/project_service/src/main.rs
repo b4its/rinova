@@ -117,6 +117,7 @@ async fn main() -> std::io::Result<()> {
                     // Component management
                     .route("/{id}/components", web::get().to(list_components))
                     .route("/{id}/components", web::post().to(add_component))
+                    .route("/{id}/components", web::put().to(save_components))
                     .route("/{id}/components/{component_id}", web::get().to(get_component))
                     .route("/{id}/components/{component_id}", web::put().to(update_component))
                     .route("/{id}/components/{component_id}", web::delete().to(delete_component))

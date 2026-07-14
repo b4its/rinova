@@ -1,0 +1,24 @@
+# Dependencies (reinstalled inside the image)
+node_modules
+
+# Build artifacts
+.output
+.nuxt
+dist
+
+# Env files (provided at runtime)
+.env
+.env.*
+!.env.example
+
+# Local caches / logs
+.cache
+*.log
+.DS_Store
+
+# VCS / IDE / docs
+.git
+.gitignore
+.idea
+.vscode
+*.md

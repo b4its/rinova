@@ -166,6 +166,16 @@ pub struct UpdateComponentRequest {
     pub animations: Option<Vec<AnimationConfig>>,
 }
 
+/// Request to bulk-save the whole component tree (editor auto-save).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SaveComponentsRequest {
+    /// Full component map keyed by component ID.
+    pub components: std::collections::HashMap<String, ComponentNode>,
+    /// Root component IDs (page order).
+    #[serde(default)]
+    pub root_ids: Vec<String>,
+}
+
 /// Request to move a component
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MoveComponentRequest {

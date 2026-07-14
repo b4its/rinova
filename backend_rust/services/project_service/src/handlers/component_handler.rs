@@ -3,7 +3,7 @@
 use actix_web::{web, HttpRequest, HttpResponse};
 use uuid::Uuid;
 
-use crate::models::{AddComponentRequest, UpdateComponentRequest, MoveComponentRequest};
+use crate::models::{AddComponentRequest, UpdateComponentRequest, MoveComponentRequest, SaveComponentsRequest};
 use crate::repository::{ComponentRepository, ProjectRepository};
 
 /// Extract user ID from request headers (set by API Gateway)
@@ -281,6 +281,78 @@ pub async fn delete_component(
             HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": "Failed to delete component",
                 "code": "DELETE_FAILED"
+            }))
+        }
+    }
+}
+
+/// PUT /api/v1/projects/:id/components - Bulk-save the whole component tree.
+///
+/// Used by the editor auto-save. Replaces the entire tree in one write.
+pub async fn save_components(
+    component_repo: web::Data<ComponentRepository>,
+    project_repo: web::Data<ProjectRepository>,
+    path: web::Path<Uuid>,
+    body: web::Json<SaveComponentsRequest>,
+    req: HttpRequest,
+) -> HttpResponse {
+    let project_id = path.into_inner();
+    let user_id = match get_user_id(&req) {
+        Ok(id) => id,
+        Err(resp) => return resp,
+    };
+
+    // Confirm access first.
+    match project_repo.check_access(project_id, user_id).await {
+        Ok(true) => {}
+        Ok(false) => {
+            return HttpResponse::Forbidden().json(serde_json::json!({
+                "error": "Access denied",
+                "code": "FORBIDDEN"
+            }))
+        }
+        Err(e) => {
+            tracing::error!("Failed to check access: {}", e);
+            return HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Internal server error",
+                "code": "INTERNAL_ERROR"
+            }));
+        }
+    }
+
+    // Load the project to resolve its workspace.
+    let project = match project_repo.get_by_id(project_id).await {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            return HttpResponse::NotFound().json(serde_json::json!({
+                "error": "Project not found",
+                "code": "NOT_FOUND"
+            }))
+        }
+        Err(e) => {
+            tracing::error!("Failed to load project: {}", e);
+            return HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Internal server error",
+                "code": "INTERNAL_ERROR"
+            }));
+        }
+    };
+
+    let payload = body.into_inner();
+
+    match component_repo
+        .save_components(project_id, project.workspace_id, payload.components, payload.root_ids)
+        .await
+    {
+        Ok(document) => {
+            tracing::info!("Saved component tree for project {} (user {})", project_id, user_id);
+            HttpResponse::Ok().json(document)
+        }
+        Err(e) => {
+            tracing::error!("Failed to save components: {}", e);
+            HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Failed to save components",
+                "code": "SAVE_FAILED"
             }))
         }
     }

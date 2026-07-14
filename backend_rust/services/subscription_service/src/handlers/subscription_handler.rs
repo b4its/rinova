@@ -112,6 +112,16 @@ pub async fn upgrade_subscription(
     // Update subscription plan
     match repo.update_plan(current_subscription.id, &request.target_plan).await {
         Ok(updated_subscription) => {
+            // Record the transaction on-chain (best-effort, non-blocking).
+            crate::services::record_subscription_tx(
+                &user_id.to_string(),
+                &updated_subscription.id.to_string(),
+                request.target_plan.display_name(),
+                "upgrade",
+                request.target_plan.price_cents() as i64,
+            )
+            .await;
+
             HttpResponse::Ok().json(SubscriptionChangeResponse {
                 subscription: updated_subscription,
                 message: format!(

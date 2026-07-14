@@ -93,7 +93,9 @@ services:
     command: >
       --config-file=/opt/besu/config/config.toml
     healthcheck:
-      test: ["CMD-SHELL", "curl -f -X POST -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}' http://localhost:8545 || exit 1"]
+      # The Besu image has no curl/wget, so use bash's /dev/tcp to confirm the
+      # JSON-RPC port is accepting connections.
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8545' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -163,6 +165,7 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       ZMQ_PUBLISHER_URL: tcp://zmq-publisher:5555
+      SERVICE_PORT: "8001"
       RUST_LOG: info
     ports:
       - "8001:8001"
@@ -185,10 +188,15 @@ services:
         SERVICE_NAME: subscription_service
     container_name: rinova-subscription-service
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-rinova}:${POSTGRES_PASSWORD:-rinova_secret}@postgresql:5432/rinova
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      # subscription_service uses the `config` crate with APP__ prefix + __ separator
+      APP__DATABASE__URL: postgresql://${POSTGRES_USER:-rinova}:${POSTGRES_PASSWORD:-rinova_secret}@postgresql:5432/rinova
+      APP__STRIPE__SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      APP__STRIPE__WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # Healthcheck (in Dockerfile) curls SERVICE_PORT; align it with the port
+      # the service actually listens on (APP__SERVER__PORT default = 8002).
+      SERVICE_PORT: "8002"
       ZMQ_PUBLISHER_URL: tcp://zmq-publisher:5555
+      BLOCKCHAIN_GRPC_URL: http://blockchain-service:9005
       RUST_LOG: info
     ports:
       - "8002:8002"
@@ -215,6 +223,7 @@ services:
       MONGODB_URI: mongodb://${MONGO_USER:-rinova}:${MONGO_PASSWORD:-rinova_secret}@mongodb:27017/rinova?authSource=admin
       REDIS_URL: redis://:${REDIS_PASSWORD:-rinova_redis_secret}@redis:6379
       ZMQ_PUBLISHER_URL: tcp://zmq-publisher:5555
+      SERVICE_PORT: "8003"
       RUST_LOG: info
     ports:
       - "8003:8003"
@@ -248,6 +257,7 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       ZMQ_PUBLISHER_URL: tcp://zmq-publisher:5555
+      SERVICE_PORT: "8004"
       RUST_LOG: info
     ports:
       - "8004:8004"
@@ -274,13 +284,17 @@ services:
     environment:
       BESU_RPC_URL: http://besu:8545
       BESU_WS_URL: ws://besu:8546
-      PRIVATE_KEY: ${BESU_PRIVATE_KEY:-0x8f2a55949038a9610f50fb23b5883af3b4ecb3c3bb792cbcefbd1542c692be63}
-      OWNERSHIP_CONTRACT_ADDRESS: ${OWNERSHIP_CONTRACT_ADDRESS}
-      AUDIT_CONTRACT_ADDRESS: ${AUDIT_CONTRACT_ADDRESS}
+      BESU_PRIVATE_KEY: ${BESU_PRIVATE_KEY:-0x8f2a55949038a9610f50fb23b5883af3b4ecb3c3bb792cbcefbd1542c692be63}
+      BESU_CHAIN_ID: "20182024"
+      OWNERSHIP_CONTRACT_ADDRESS: ${OWNERSHIP_CONTRACT_ADDRESS:-0x0000000000000000000000000000000000000000}
+      AUDIT_CONTRACT_ADDRESS: ${AUDIT_CONTRACT_ADDRESS:-0x0000000000000000000000000000000000000000}
       ZMQ_PUBLISHER_URL: tcp://zmq-publisher:5555
+      GRPC_PORT: "9005"
+      SERVICE_PORT: "8005"
       RUST_LOG: info
     ports:
       - "8005:8005"
+      - "9005:9005"
     networks:
       - rinova-network
     depends_on:
@@ -301,12 +315,15 @@ services:
     container_name: rinova-notification-service
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-rinova}:${POSTGRES_PASSWORD:-rinova_secret}@postgresql:5432/rinova
+      MONGODB_URI: mongodb://${MONGO_USER:-rinova}:${MONGO_PASSWORD:-rinova_secret}@mongodb:27017/rinova?authSource=admin
+      MONGODB_DATABASE: rinova
       ZMQ_SUBSCRIBER_URL: tcp://zmq-publisher:5556
       REDIS_URL: redis://:${REDIS_PASSWORD:-rinova_redis_secret}@redis:6379
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER}
+      SMTP_USERNAME: ${SMTP_USER}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SERVICE_PORT: "8006"
       RUST_LOG: info
     ports:
       - "8006:8006"
@@ -343,6 +360,8 @@ services:
       NUXT_HOST: 0.0.0.0
       NUXT_PORT: 3000
       NODE_ENV: production
+      # Server-side Redis for the landing-page static cache
+      REDIS_URL: redis://:${REDIS_PASSWORD:-rinova_redis_secret}@redis:6379
     ports:
       - "3000:3000"
     networks:
@@ -350,6 +369,8 @@ services:
     depends_on:
       api-gateway:
         condition: service_started
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s

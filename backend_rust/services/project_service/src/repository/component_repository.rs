@@ -294,6 +294,49 @@ impl ComponentRepository {
         Ok(document.components.get(component_id).cloned().unwrap())
     }
 
+    /// Bulk-save the entire component tree for a project (used by the editor's
+    /// auto-save). Upserts the document, replacing components/root_ids wholesale.
+    pub async fn save_components(
+        &self,
+        project_id: Uuid,
+        workspace_id: Uuid,
+        components: std::collections::HashMap<String, ComponentNode>,
+        root_ids: Vec<String>,
+    ) -> Result<ProjectComponents> {
+        let filter = doc! { "project_id": project_id.to_string() };
+
+        // Preserve existing created_at/version if the document already exists.
+        let existing = self.get_project_components(project_id).await?;
+        let now = chrono::Utc::now();
+
+        let document = match existing {
+            Some(mut doc) => {
+                doc.components = components;
+                doc.root_ids = root_ids;
+                doc.version += 1;
+                doc.updated_at = now;
+                doc
+            }
+            None => {
+                let mut doc = ProjectComponents::new(project_id, workspace_id);
+                doc.components = components;
+                doc.root_ids = root_ids;
+                doc.updated_at = now;
+                doc
+            }
+        };
+
+        self.collection
+            .replace_one(
+                filter,
+                &document,
+                mongodb::options::ReplaceOptions::builder().upsert(true).build(),
+            )
+            .await?;
+
+        Ok(document)
+    }
+
     /// Delete entire project component document
     pub async fn delete_project_document(&self, project_id: Uuid) -> Result<()> {
         let filter = doc! { "project_id": project_id.to_string() };

@@ -9,7 +9,8 @@ use std::time::Duration;
 
 use crate::models::{
     AuditRecord, AuditVerification, OwnershipHistory, OwnershipProof, OwnershipRecord,
-    OwnershipTransferEvent, RecordOwnershipRequest, RecordPublishRequest, TransferOwnershipRequest,
+    OwnershipTransferEvent, RecordOwnershipRequest, RecordPublishRequest, RecordSubscriptionRequest,
+    SubscriptionRecord, TransferOwnershipRequest,
 };
 
 /// Configuration for blockchain client
@@ -184,6 +185,66 @@ impl BlockchainClient {
             ipfs_cid: request.ipfs_cid,
             published_url: request.published_url,
         })
+    }
+
+    /// Record a subscription transaction on-chain.
+    ///
+    /// The canonical payload (user + subscription + plan + action + amount) is
+    /// hashed with SHA-256; that hash is what gets anchored on the chain so the
+    /// transaction can be verified later without exposing raw payment data.
+    pub async fn record_subscription(
+        &self,
+        request: RecordSubscriptionRequest,
+    ) -> Result<SubscriptionRecord> {
+        tracing::info!(
+            "Recording subscription tx: user={}, sub={}, action={}, plan={}",
+            request.user_id, request.subscription_id, request.action, request.plan_type
+        );
+
+        // Build a canonical, deterministic payload for hashing.
+        let canonical = format!(
+            "{}|{}|{}|{}|{}|{}|{}",
+            request.user_id,
+            request.subscription_id,
+            request.plan_type,
+            request.action,
+            request.amount_cents,
+            request.currency,
+            request.payment_reference.as_deref().unwrap_or("")
+        );
+        let content_hash = crate::services::compute_hash(canonical.as_bytes());
+
+        // In production this would submit a tx to the audit contract and wait
+        // for confirmations. Here we derive a deterministic tx hash from the
+        // content hash to keep the flow verifiable end-to-end.
+        let tx_hash = format!("0x{}", content_hash);
+        let block_number = 12345u64;
+
+        Ok(SubscriptionRecord {
+            user_id: request.user_id,
+            subscription_id: request.subscription_id,
+            plan_type: request.plan_type,
+            action: request.action,
+            amount_cents: request.amount_cents,
+            currency: request.currency,
+            payment_reference: request.payment_reference,
+            content_hash,
+            tx_hash,
+            block_number,
+            timestamp: chrono::Utc::now().timestamp_millis(),
+        })
+    }
+
+    /// Get subscription transaction history for a user.
+    pub async fn get_subscription_history(
+        &self,
+        user_id: &str,
+        limit: u64,
+    ) -> Result<Vec<SubscriptionRecord>> {
+        tracing::info!("Getting subscription history for user: {}", user_id);
+        let _ = limit;
+        // In production, query the audit contract events filtered by user.
+        Ok(vec![])
     }
 
     /// Get publish history for a project

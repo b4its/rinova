@@ -1,0 +1,13 @@
+<script setup lang="ts">
+import { Separator, type SeparatorProps } from 'reka-ui'
+import { cn } from '~/lib/utils'
+
+const props = defineProps<SeparatorProps>()
+</script>
+
+<template>
+  <Separator
+    v-bind="props"
+    :class="cn('shrink-0 bg-border', props.orientation === 'vertical' ? 'w-px h-full' : 'h-px w-full', props.class)"
+  />
+</template>

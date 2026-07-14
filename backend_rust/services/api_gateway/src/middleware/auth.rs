@@ -8,6 +8,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// JWT claims
+///
+/// NOTE: `plan` and `email` are optional here because the token issuer
+/// (user_service) only embeds `sub`, `email`, `exp`, `iat`. Keeping them
+/// optional lets the gateway validate tokens from the issuer without a
+/// shape mismatch. `plan` defaults to "freemium" for rate-limiting purposes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
     /// Subject (user ID)
@@ -16,10 +21,17 @@ pub struct Claims {
     pub iat: i64,
     /// Expiration time
     pub exp: i64,
-    /// User's subscription plan
+    /// User's subscription plan (defaults to freemium if absent in token)
+    #[serde(default = "default_plan")]
     pub plan: String,
-    /// User's email
+    /// User's email (optional; absent in some tokens)
+    #[serde(default)]
     pub email: String,
+}
+
+/// Default subscription plan when the token carries no `plan` claim.
+fn default_plan() -> String {
+    "freemium".to_string()
 }
 
 /// Authenticated user extracted from JWT

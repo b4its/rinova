@@ -28,3 +28,6 @@ sha2 = "0.10"
 hex = "0.4"
 sqlx.workspace = true
 validator.workspace = true
+tonic.workspace = true
+prost.workspace = true
+proto = { path = "../../libs/proto" }

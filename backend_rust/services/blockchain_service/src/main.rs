@@ -24,11 +24,14 @@ use actix_web::{web, App, HttpServer};
 use dotenv::dotenv;
 use std::sync::Arc;
 
+mod grpc;
 mod handlers;
 mod models;
 mod services;
 
+use grpc::BlockchainGrpc;
 use handlers::*;
+use proto::blockchain::blockchain_service_server::BlockchainServiceServer;
 use services::{BlockchainClient, BlockchainConfig, HashService};
 
 /// Health check response
@@ -82,6 +85,25 @@ async fn main() -> std::io::Result<()> {
     // Initialize hash service
     let hash_service = HashService::new();
 
+    // Start the gRPC server on a separate port for internal service calls.
+    let grpc_port = std::env::var("GRPC_PORT")
+        .unwrap_or_else(|_| "9005".to_string())
+        .parse::<u16>()
+        .expect("GRPC_PORT must be a valid port number");
+    let grpc_client = blockchain_client.clone();
+    tokio::spawn(async move {
+        let addr = format!("0.0.0.0:{}", grpc_port).parse().expect("valid grpc addr");
+        tracing::info!("Starting Blockchain gRPC server on {}", addr);
+        let svc = BlockchainServiceServer::new(BlockchainGrpc::new(grpc_client));
+        if let Err(e) = tonic::transport::Server::builder()
+            .add_service(svc)
+            .serve(addr)
+            .await
+        {
+            tracing::error!("gRPC server error: {}", e);
+        }
+    });
+
     // Start server
     let bind_address = format!("0.0.0.0:{}", port);
     tracing::info!("Starting Blockchain Service on {}", bind_address);
@@ -104,6 +126,11 @@ async fn main() -> std::io::Result<()> {
                     .route("/{project_id}", web::post().to(record_publish))
                     .route("/{project_id}", web::get().to(get_audit_trail))
                     .route("/{project_id}/verify", web::get().to(verify_audit)),
+            )
+            .service(
+                web::scope("/api/v1/blockchain/subscription")
+                    .route("", web::post().to(record_subscription))
+                    .route("/{user_id}", web::get().to(get_subscription_history)),
             )
             .route("/api/v1/blockchain/hash", web::post().to(compute_hash))
     })

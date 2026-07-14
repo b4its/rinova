@@ -22,7 +22,9 @@ target/
 !README.md
 
 # Test files
-**/tests/
+# NOTE: the top-level `tests/` crate is a workspace member declared in
+# Cargo.toml, so it MUST be present for cargo to resolve the workspace inside
+# Docker. Do not ignore it. Only ignore stray per-service test artifacts.
 **/*.test.rs
 **/*.spec.rs
 

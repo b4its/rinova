@@ -130,6 +130,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-rinova_jwt_secret_key_change_in_production}
       DATABASE_URL: postgresql://${POSTGRES_USER:-rinova}:${POSTGRES_PASSWORD:-rinova_secret}@postgresql:5432/rinova
       USER_SERVICE_URL: http://user-service:8001
+      WORKSPACE_SERVICE_URL: http://workspace-service:8007
       SUBSCRIPTION_SERVICE_URL: http://subscription-service:8002
       PROJECT_SERVICE_URL: http://project-service:8003
       PUBLISHING_SERVICE_URL: http://publishing-service:8004
@@ -169,6 +170,32 @@ services:
       RUST_LOG: info
     ports:
       - "8001:8001"
+    networks:
+      - rinova-network
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      zmq-publisher:
+        condition: service_started
+    restart: unless-stopped
+
+  # Workspace Service (Rust)
+  workspace-service:
+    profiles: ["full", "backend"]
+    build:
+      context: ./backend_rust
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE_NAME: workspace_service
+    container_name: rinova-workspace-service
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rinova}:${POSTGRES_PASSWORD:-rinova_secret}@postgresql:5432/rinova
+      JWT_SECRET: ${JWT_SECRET:-rinova_jwt_secret_key_change_in_production}
+      ZMQ_PUBLISHER_URL: tcp://zmq-publisher:5555
+      SERVICE_PORT: "8007"
+      RUST_LOG: info
+    ports:
+      - "8007:8007"
     networks:
       - rinova-network
     depends_on:

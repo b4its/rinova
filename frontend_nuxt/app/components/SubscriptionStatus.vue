@@ -2,7 +2,6 @@
 import type { PlanType } from '~/stores/subscription'
 
 const subscriptionStore = useSubscriptionStore()
-const showUpgrade = ref(false)
 
 const planColors: Record<PlanType, string> = {
   freemium: 'bg-muted text-muted-foreground',
@@ -36,10 +35,8 @@ const planNames: Record<PlanType, string> = {
       </div>
     </div>
 
-    <button v-if="subscriptionStore.currentPlan !== 'exclusive'" class="btn btn-primary btn-sm w-full" @click="showUpgrade = true">
+    <NuxtLink v-if="subscriptionStore.currentPlan !== 'exclusive'" to="/panel/subscription" class="btn btn-primary btn-sm w-full">
       Upgrade Plan
-    </button>
-
-    <UpgradePlanModal v-if="showUpgrade" @close="showUpgrade = false" />
+    </NuxtLink>
   </div>
 </template>

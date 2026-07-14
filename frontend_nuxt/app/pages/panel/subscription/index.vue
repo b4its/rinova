@@ -11,15 +11,97 @@ const plans = [
   { id: 'exclusive' as const, name: 'Exclusive', price: 99, desc: 'For agencies & teams', features: ['Everything in Enterprise', 'Team Collaboration', 'White Label', 'Dedicated Manager', 'API Access'] }
 ]
 
+type PlanId = 'freemium' | 'enterprise' | 'exclusive'
+
 const isLoading = ref(false)
 const showCancelModal = ref(false)
 
+// --- Payment simulation state ---
+const showPaymentModal = ref(false)
+const pendingPlan = ref<{ id: PlanId; name: string; price: number } | null>(null)
+const paymentProcessing = ref(false)
+const paymentSuccess = ref(false)
+const paymentError = ref<string | null>(null)
+const card = ref({ name: '', number: '', expiry: '', cvc: '' })
+
 const currentPlanIndex = computed(() => plans.findIndex(p => p.id === subscriptionStore.currentPlan))
 
-async function handleUpgrade(planId: 'freemium' | 'enterprise' | 'exclusive') {
+// Downgrade to a cheaper/free plan doesn't require payment; upgrades do.
+function handleUpgrade(planId: PlanId) {
   if (planId === subscriptionStore.currentPlan) return
+  const plan = plans.find(p => p.id === planId)!
+  const isUpgrade = plans.findIndex(p => p.id === planId) > currentPlanIndex.value
+
+  if (!isUpgrade || plan.price === 0) {
+    // Free plan / downgrade — apply immediately, no payment needed.
+    applyPlanChange(planId)
+    return
+  }
+
+  // Paid upgrade — open the simulated payment modal.
+  pendingPlan.value = { id: plan.id, name: plan.name, price: plan.price }
+  paymentSuccess.value = false
+  paymentError.value = null
+  card.value = { name: '', number: '', expiry: '', cvc: '' }
+  showPaymentModal.value = true
+}
+
+async function applyPlanChange(planId: PlanId) {
   isLoading.value = true
-  try { await subscriptionStore.upgradePlan(planId) } finally { isLoading.value = false }
+  try {
+    await subscriptionStore.upgradePlan(planId)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const canPay = computed(() => {
+  const digits = card.value.number.replace(/\s/g, '')
+  return (
+    card.value.name.trim().length > 0 &&
+    digits.length >= 12 &&
+    /^\d{2}\/\d{2}$/.test(card.value.expiry) &&
+    /^\d{3,4}$/.test(card.value.cvc)
+  )
+})
+
+// Format the card number as the user types: groups of 4 digits.
+function onCardNumberInput(e: Event) {
+  const raw = (e.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 16)
+  card.value.number = raw.replace(/(.{4})/g, '$1 ').trim()
+}
+
+function onExpiryInput(e: Event) {
+  const raw = (e.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 4)
+  card.value.expiry = raw.length > 2 ? `${raw.slice(0, 2)}/${raw.slice(2)}` : raw
+}
+
+async function confirmPayment() {
+  if (!pendingPlan.value || !canPay.value) return
+  paymentProcessing.value = true
+  paymentError.value = null
+  try {
+    // Simulate a payment gateway round-trip.
+    await new Promise(r => setTimeout(r, 1600))
+    // Apply the real plan change on the backend after "payment succeeds".
+    await subscriptionStore.upgradePlan(pendingPlan.value.id)
+    paymentSuccess.value = true
+    // Auto-close shortly after showing the success state.
+    setTimeout(() => {
+      showPaymentModal.value = false
+      pendingPlan.value = null
+    }, 1500)
+  } catch (e) {
+    paymentError.value = e instanceof Error ? e.message : 'Payment failed. Please try again.'
+  } finally {
+    paymentProcessing.value = false
+  }
+}
+
+function closePaymentModal() {
+  if (paymentProcessing.value) return
+  showPaymentModal.value = false
+  pendingPlan.value = null
 }
 
 async function handleCancelSubscription() {
@@ -137,6 +219,79 @@ async function handleCancelSubscription() {
         <div class="modal-footer">
           <button class="btn btn-secondary btn-sm" @click="showCancelModal = false">Keep Subscription</button>
           <button class="btn bg-destructive text-destructive-foreground hover:bg-destructive/90 btn-sm" @click="handleCancelSubscription">Cancel Subscription</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Simulated Payment Modal -->
+    <div v-if="showPaymentModal && pendingPlan" class="modal-overlay" @click.self="closePaymentModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 class="text-lg font-semibold">Complete Payment</h3>
+          <button v-if="!paymentProcessing" class="text-muted-foreground hover:text-foreground" @click="closePaymentModal">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Success state -->
+        <div v-if="paymentSuccess" class="modal-body text-center py-8">
+          <div class="mx-auto w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center mb-4">
+            <svg class="w-8 h-8 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h4 class="text-lg font-semibold">Payment Successful</h4>
+          <p class="text-sm text-muted-foreground mt-1">
+            You're now on the {{ pendingPlan.name }} plan.
+          </p>
+        </div>
+
+        <!-- Payment form -->
+        <div v-else class="modal-body space-y-4">
+          <div class="rounded-lg bg-muted/60 p-3 flex items-center justify-between">
+            <span class="text-sm text-muted-foreground">{{ pendingPlan.name }} plan</span>
+            <span class="text-lg font-bold">${{ pendingPlan.price }}<span class="text-xs font-normal text-muted-foreground">/mo</span></span>
+          </div>
+
+          <div class="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+            Simulation mode — no real charge. Use any test card details (e.g. 4242 4242 4242 4242).
+          </div>
+
+          <div v-if="paymentError" class="rounded-md border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40 px-3 py-2 text-sm text-red-700 dark:text-red-400">
+            {{ paymentError }}
+          </div>
+
+          <div class="space-y-2">
+            <label class="label">Cardholder Name</label>
+            <input v-model="card.name" type="text" class="input" placeholder="John Doe" :disabled="paymentProcessing" />
+          </div>
+          <div class="space-y-2">
+            <label class="label">Card Number</label>
+            <input :value="card.number" @input="onCardNumberInput" type="text" inputmode="numeric" class="input" placeholder="4242 4242 4242 4242" :disabled="paymentProcessing" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="space-y-2">
+              <label class="label">Expiry</label>
+              <input :value="card.expiry" @input="onExpiryInput" type="text" inputmode="numeric" class="input" placeholder="MM/YY" :disabled="paymentProcessing" />
+            </div>
+            <div class="space-y-2">
+              <label class="label">CVC</label>
+              <input v-model="card.cvc" type="text" inputmode="numeric" maxlength="4" class="input" placeholder="123" :disabled="paymentProcessing" />
+            </div>
+          </div>
+        </div>
+
+        <div v-if="!paymentSuccess" class="modal-footer">
+          <button class="btn btn-secondary btn-sm" :disabled="paymentProcessing" @click="closePaymentModal">Cancel</button>
+          <button class="btn btn-primary btn-sm" :disabled="!canPay || paymentProcessing" @click="confirmPayment">
+            <svg v-if="paymentProcessing" class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            {{ paymentProcessing ? 'Processing...' : `Pay $${pendingPlan.price}` }}
+          </button>
         </div>
       </div>
     </div>

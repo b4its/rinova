@@ -93,6 +93,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         const personal = workspaces.value.find(w => w.type === 'personal')
         currentWorkspaceId.value = personal?.id ?? workspaces.value[0]!.id
       }
+    } catch (e) {
+      // Don't let a workspace fetch failure crash the whole app.
+      console.warn('[workspace] failed to fetch workspaces:', e)
+      workspaces.value = []
     } finally {
       isLoading.value = false
     }

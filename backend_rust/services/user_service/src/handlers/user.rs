@@ -1,4 +1,8 @@
-use actix_web::{HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
+use serde::Deserialize;
+use uuid::Uuid;
+
+use crate::{repository, AppState};
 
 #[derive(serde::Serialize)]
 pub struct UserResponse {
@@ -8,6 +12,7 @@ pub struct UserResponse {
     pub account_type: shared::types::AccountType,
     pub email_verified: bool,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl From<shared::types::User> for UserResponse {
@@ -19,20 +24,77 @@ impl From<shared::types::User> for UserResponse {
             account_type: user.account_type,
             email_verified: user.email_verified_at.is_some(),
             created_at: user.created_at,
+            updated_at: user.updated_at,
         }
     }
 }
 
-pub async fn get_current_user() -> HttpResponse {
-    // This is a placeholder - actual implementation requires JWT middleware
-    HttpResponse::Ok().json(serde_json::json!({
-        "message": "User endpoint - requires authentication"
-    }))
+#[derive(Debug, Deserialize)]
+pub struct UpdateUserRequest {
+    pub full_name: Option<String>,
 }
 
-pub async fn update_user() -> HttpResponse {
-    // This is a placeholder - actual implementation requires JWT middleware
-    HttpResponse::Ok().json(serde_json::json!({
-        "message": "Update user endpoint - requires authentication"
-    }))
+/// Extract the authenticated user id from the `X-User-ID` header injected by
+/// the API gateway after it validates the JWT.
+fn extract_user_id(req: &HttpRequest) -> Option<Uuid> {
+    req.headers()
+        .get("X-User-ID")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| Uuid::parse_str(s).ok())
+}
+
+/// GET /api/v1/users/me - return the authenticated user's profile.
+pub async fn get_current_user(state: web::Data<AppState>, req: HttpRequest) -> HttpResponse {
+    let user_id = match extract_user_id(&req) {
+        Some(id) => id,
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({
+                "error": "Unauthorized",
+                "code": "UNAUTHORIZED"
+            }))
+        }
+    };
+
+    match repository::find_by_id(&state.db, user_id).await {
+        Ok(Some(user)) => HttpResponse::Ok().json(UserResponse::from(user)),
+        Ok(None) => HttpResponse::NotFound().json(serde_json::json!({
+            "error": "User not found",
+            "code": "USER_NOT_FOUND"
+        })),
+        Err(e) => {
+            tracing::error!("Failed to load user {}: {}", user_id, e);
+            HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Internal server error",
+                "code": "INTERNAL_ERROR"
+            }))
+        }
+    }
+}
+
+/// PUT /api/v1/users/me - update the authenticated user's profile.
+pub async fn update_user(
+    state: web::Data<AppState>,
+    req: HttpRequest,
+    body: web::Json<UpdateUserRequest>,
+) -> HttpResponse {
+    let user_id = match extract_user_id(&req) {
+        Some(id) => id,
+        None => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({
+                "error": "Unauthorized",
+                "code": "UNAUTHORIZED"
+            }))
+        }
+    };
+
+    match repository::update(&state.db, user_id, body.full_name.as_deref()).await {
+        Ok(user) => HttpResponse::Ok().json(UserResponse::from(user)),
+        Err(e) => {
+            tracing::error!("Failed to update user {}: {}", user_id, e);
+            HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Failed to update user",
+                "code": "UPDATE_FAILED"
+            }))
+        }
+    }
 }

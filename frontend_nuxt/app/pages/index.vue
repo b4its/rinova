@@ -299,7 +299,7 @@ const yearlySavings = computed(() => Math.round((1 - (290 / (29 * 12))) * 100))
           <div v-for="(step, index) in steps" :key="step.step" data-aos="fade-up" :data-aos-delay="index * 150" class="relative">
             <div v-if="index < steps.length - 1" class="hidden md:block absolute top-8 left-[60%] w-[80%] h-0.5 border-t-2 border-dashed border-border" />
             <div class="text-center">
-              <div :class="`w-16 h-16 ${step.color} rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg`">
+              <div :class="`w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg`">
                 <span class="text-2xl font-bold text-white">{{ step.step }}</span>
               </div>
               <h3 class="text-lg font-semibold text-foreground mb-2">{{ step.title }}</h3>

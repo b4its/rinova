@@ -20,7 +20,8 @@ export default defineNuxtPlugin(async () => {
 
   const workspaceStore = useWorkspaceStore()
   const subscriptionStore = useSubscriptionStore()
-  await Promise.all([
+  // allSettled so one failing hydration call never crashes app startup.
+  await Promise.allSettled([
     workspaceStore.fetchWorkspaces(),
     subscriptionStore.fetchSubscription(),
   ])

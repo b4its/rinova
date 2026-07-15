@@ -812,11 +812,6 @@ MIT License — Lihat [LICENSE](LICENSE) untuk detail.
 
 ---
 
-## Support
 
-- **Issues:** https://github.com/anomalyco/opencode/issues
-- **Dokumentasi:** https://opencode.ai
 
----
-
-*Rinova — Professional Website Builder. Dibangun dengan Rust + Nuxt 4 + Hyperledger Besu.*
+*Rinova — Professional Website Builder. Dibangun dengan Rust + Nuxt 4*

@@ -25,6 +25,7 @@ pub enum AccountType {
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
 #[sqlx(type_name = "VARCHAR", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum UserRole {
     User,
     Superuser,
@@ -169,7 +170,7 @@ pub struct Claims {
     pub email: String,
     pub exp: usize,
     pub iat: usize,
-    pub role: UserRole,
+    pub role: String,
     #[serde(default = "default_plan")]
     pub plan: String,
 }
@@ -197,4 +198,15 @@ pub enum ProjectStatus {
     Draft,
     Published,
     Archived,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_user_role_serde() {
+        assert_eq!(serde_json::to_string(&UserRole::Superuser).unwrap(), "\"superuser\"");
+        assert_eq!(serde_json::to_string(&UserRole::User).unwrap(), "\"user\"");
+    }
 }

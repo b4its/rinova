@@ -124,7 +124,23 @@ pub async fn login(
                 .max_age(actix_web::cookie::time::Duration::days(7))
                 .finish(),
         )
-        .json(AuthResponse { user, token }))
+        .json(serde_json::json!({
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "password_hash": user.password_hash,
+                "full_name": user.full_name,
+                "account_type": user.account_type,
+                "role": match &user.role {
+                    shared::types::UserRole::Superuser => "superuser",
+                    shared::types::UserRole::User => "user",
+                },
+                "email_verified_at": user.email_verified_at,
+                "created_at": user.created_at,
+                "updated_at": user.updated_at,
+            },
+            "token": token,
+        })))
 }
 
 pub async fn verify_email(
@@ -152,7 +168,20 @@ pub async fn verify_email(
         .json(serde_json::json!({
             "message": "Email verified successfully",
             "redirect_url": "/onboarding",
-            "user": user
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "password_hash": user.password_hash,
+                "full_name": user.full_name,
+                "account_type": user.account_type,
+                "role": match &user.role {
+                    shared::types::UserRole::Superuser => "superuser",
+                    shared::types::UserRole::User => "user",
+                },
+                "email_verified_at": user.email_verified_at,
+                "created_at": user.created_at,
+                "updated_at": user.updated_at,
+            }
         })))
 }
 
@@ -189,4 +218,17 @@ pub async fn logout() -> Result<HttpResponse, ServiceError> {
         .json(MessageResponse {
             message: "Logged out successfully".to_string(),
         }))
+}
+
+#[cfg(test)]
+mod role_test {
+    use shared::types::UserRole;
+    
+    #[test]
+    fn test_role_serialization() {
+        let role = UserRole::Superuser;
+        let json = serde_json::to_string(&role).unwrap();
+        println!("Role JSON: {}", json);
+        assert_eq!(json, "\"superuser\"");
+    }
 }

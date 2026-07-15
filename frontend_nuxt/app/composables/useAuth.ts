@@ -1,4 +1,4 @@
-import type { User } from '~/stores/user'
+import type { User, UserRole } from '~/stores/user'
 
 /** Raw user shape as returned by the Rust user_service (snake_case). */
 interface BackendUser {
@@ -70,6 +70,14 @@ function ensureLocalUser(email: string, name: string): 'user' | 'superuser' {
 }
 
 /** Map the backend user payload to the frontend `User` model. */
+function normalizeRole(role: string | undefined): UserRole | undefined {
+  if (!role) return undefined
+  const lower = role.toLowerCase()
+  if (lower === 'superuser') return 'superuser'
+  if (lower === 'user') return 'user'
+  return undefined
+}
+
 function mapUser(u: BackendUser): User {
   const name = u.full_name ?? u.email.split('@')[0]
   const localRole = ensureLocalUser(u.email, name)
@@ -78,7 +86,7 @@ function mapUser(u: BackendUser): User {
     email: u.email,
     fullName: u.full_name,
     accountType: u.account_type,
-    role: u.role ?? localRole,
+    role: normalizeRole(u.role) ?? localRole,
     emailVerified: u.email_verified_at != null,
     createdAt: u.created_at,
     updatedAt: u.updated_at,

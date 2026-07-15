@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255),
     account_type VARCHAR(50) NOT NULL DEFAULT 'personal',
+    role VARCHAR(50) NOT NULL DEFAULT 'user',
     email_verified_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -115,11 +116,13 @@ CREATE INDEX IF NOT EXISTS idx_workspace_members_role ON workspace_members(role)
 CREATE TABLE IF NOT EXISTS subscriptions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
     plan_type VARCHAR(50) NOT NULL DEFAULT 'freemium',
     status VARCHAR(50) NOT NULL DEFAULT 'active',
     current_period_start TIMESTAMP WITH TIME ZONE,
     current_period_end TIMESTAMP WITH TIME ZONE,
     stripe_subscription_id VARCHAR(255),
+    stripe_customer_id VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
@@ -438,7 +441,11 @@ INSERT INTO schema_migrations (version) VALUES
     ('20250118_000005_create_subscriptions_table.sql'),
     ('20250118_000006_create_projects_table.sql'),
     ('20250118_000007_create_published_sites_table.sql'),
-    ('20250118_000008_create_audit_logs_table.sql')
+    ('20250118_000008_create_audit_logs_table.sql'),
+    ('20240115000001_create_users_workspaces.sql'),
+    ('20240115000002_create_subscriptions.sql'),
+    ('20240115000003_create_projects.sql'),
+    ('20240115000004_add_workspace_to_subscriptions.sql')
 ON CONFLICT (version) DO NOTHING;
 
 -- ============================================================================
@@ -456,6 +463,46 @@ COMMENT ON TABLE audit_logs IS 'System audit trail for user actions';
 COMMENT ON FUNCTION set_current_user_id(UUID) IS 'Set the current user context for Row-Level Security';
 COMMENT ON FUNCTION get_current_user_id() IS 'Get the current user context for Row-Level Security';
 
--- Initial admin user (password: admin123 - change in production)
--- INSERT INTO users (email, password_hash, full_name, account_type, email_verified_at)
--- VALUES ('admin@rinova.app', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIBkOkMmOa', 'Admin', 'personal', NOW());
+-- ============================================================================
+-- SEED DATA
+-- ============================================================================
+-- All seed accounts use password: Password123!
+-- (hash: $2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe)
+
+INSERT INTO users (email, password_hash, full_name, account_type, role, email_verified_at)
+VALUES
+    ('admin@rinova.id',    '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Super Admin',     'personal', 'superuser', NOW()),
+    ('admin1@rinova.io',   '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Admin One',       'personal', 'superuser', NOW()),
+    ('admin2@rinova.io',   '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Admin Two',       'personal', 'user',      NOW()),
+    ('admin3@rinova.io',   '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Admin Three',     'personal', 'user',      NOW()),
+    ('admin4@rinova.io',   '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Admin Four',      'personal', 'user',      NOW()),
+    ('admin5@rinova.io',   '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Admin Five',      'personal', 'user',      NOW()),
+    ('enterprise1@rinova.io', '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Enterprise One',  'personal', 'user',  NOW()),
+    ('enterprise2@rinova.io', '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Enterprise Two',  'personal', 'user',  NOW()),
+    ('enterprise3@rinova.io', '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Enterprise Three','personal', 'user',  NOW()),
+    ('enterprise4@rinova.io', '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Enterprise Four', 'personal', 'user',  NOW()),
+    ('enterprise5@rinova.io', '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Enterprise Five', 'personal', 'user',  NOW()),
+    ('exclusive1@rinova.io', '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Exclusive One',   'personal', 'user',  NOW()),
+    ('exclusive2@rinova.io', '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Exclusive Two',   'personal', 'user',  NOW()),
+    ('exclusive3@rinova.io', '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Exclusive Three', 'personal', 'user',  NOW()),
+    ('exclusive4@rinova.io', '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Exclusive Four',  'personal', 'user',  NOW()),
+    ('exclusive5@rinova.io', '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Exclusive Five',  'personal', 'user',  NOW()),
+    ('test@rinova.local',  '$2b$12$kwCyZwwpHHPyNNQBt20xqOU/OtrdFJSa7VHfEES59gtxlQ/twzuIe', 'Test User',       'personal', 'user',  NOW())
+ON CONFLICT (email) DO NOTHING;
+
+-- Create personal workspace for every user
+INSERT INTO workspaces (name, type, owner_id, created_at, updated_at)
+SELECT 'Personal Workspace', 'personal', id, NOW(), NOW() FROM users
+ON CONFLICT DO NOTHING;
+
+-- Add owner as workspace member
+INSERT INTO workspace_members (workspace_id, user_id, role, invitation_status, joined_at)
+SELECT w.id, w.owner_id, 'owner', 'accepted', NOW()
+FROM workspaces w
+ON CONFLICT (workspace_id, user_id) DO NOTHING;
+
+-- Create freemium subscriptions
+INSERT INTO subscriptions (user_id, plan_type, status, current_period_start, current_period_end)
+SELECT id, 'freemium', 'active', NOW(), NOW() + INTERVAL '1 month'
+FROM users
+ON CONFLICT DO NOTHING;

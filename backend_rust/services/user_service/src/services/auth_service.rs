@@ -229,12 +229,17 @@ pub fn generate_jwt_token(user: &User, secret: &str, plan: &str) -> ServiceResul
         .expect("valid timestamp")
         .timestamp() as usize;
 
+    let role_str = match &user.role {
+        shared::types::UserRole::Superuser => "superuser",
+        shared::types::UserRole::User => "user",
+    };
+
     let claims = Claims {
         sub: user.id.to_string(),
         email: user.email.clone(),
         exp: expiration,
         iat: Utc::now().timestamp() as usize,
-        role: user.role.clone(),
+        role: role_str.to_string(),
         plan: plan.to_string(),
     };
 

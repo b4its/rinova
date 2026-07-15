@@ -27,11 +27,19 @@ pub struct Claims {
     /// User's email (optional; absent in some tokens)
     #[serde(default)]
     pub email: String,
+    /// User's global role (defaults to user if absent in token)
+    #[serde(default = "default_role")]
+    pub role: String,
 }
 
 /// Default subscription plan when the token carries no `plan` claim.
 fn default_plan() -> String {
     "freemium".to_string()
+}
+
+/// Default role when the token carries no `role` claim.
+fn default_role() -> String {
+    "user".to_string()
 }
 
 /// Authenticated user extracted from JWT
@@ -40,6 +48,7 @@ pub struct AuthenticatedUser {
     pub user_id: Uuid,
     pub plan: String,
     pub email: String,
+    pub role: String,
 }
 
 impl AuthenticatedUser {
@@ -75,6 +84,7 @@ impl AuthenticatedUser {
             user_id,
             plan: claims.plan,
             email: claims.email,
+            role: claims.role,
         })
     }
 
@@ -86,6 +96,11 @@ impl AuthenticatedUser {
             ("freemium", "freemium") => true,
             _ => false,
         }
+    }
+
+    /// Check if user is a superuser (global admin)
+    pub fn is_superuser(&self) -> bool {
+        self.role == "superuser"
     }
 }
 
@@ -153,7 +168,7 @@ impl JwtService {
     }
 
     /// Generate a new JWT token
-    pub fn generate_token(&self, user_id: Uuid, email: &str, plan: &str) -> Result<String, jsonwebtoken::errors::Error> {
+    pub fn generate_token(&self, user_id: Uuid, email: &str, plan: &str, role: &str) -> Result<String, jsonwebtoken::errors::Error> {
         let now = Utc::now();
         let exp = now + Duration::hours(self.expiry_hours as i64);
 
@@ -163,6 +178,7 @@ impl JwtService {
             exp: exp.timestamp(),
             plan: plan.to_string(),
             email: email.to_string(),
+            role: role.to_string(),
         };
 
         encode(
@@ -199,12 +215,13 @@ mod tests {
         let service = JwtService::new("test-secret".to_string(), 168);
         let user_id = Uuid::new_v4();
 
-        let token = service.generate_token(user_id, "test@example.com", "enterprise").unwrap();
+        let token = service.generate_token(user_id, "test@example.com", "enterprise", "user").unwrap();
         let claims = service.validate_token(&token).unwrap();
 
         assert_eq!(claims.sub, user_id.to_string());
         assert_eq!(claims.email, "test@example.com");
         assert_eq!(claims.plan, "enterprise");
+        assert_eq!(claims.role, "user");
     }
 
     #[test]
@@ -213,6 +230,7 @@ mod tests {
             user_id: Uuid::new_v4(),
             plan: "enterprise".to_string(),
             email: "test@example.com".to_string(),
+            role: "user".to_string(),
         };
 
         assert!(user.has_plan("freemium"));

@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::models::{PlanType, Subscription, SubscriptionStatus};
 
 /// Repository for subscription CRUD operations
+#[derive(Clone)]
 pub struct SubscriptionRepository {
     pool: PgPool,
 }
@@ -17,7 +18,7 @@ impl SubscriptionRepository {
         SubscriptionRepository { pool }
     }
 
-    /// Create a new freemium subscription for a user
+    /// Create a new freemium subscription for a user (personal)
     pub async fn create_freemium(&self, user_id: Uuid) -> Result<Subscription> {
         let subscription = sqlx::query_as::<_, Subscription>(
             r#"
@@ -33,6 +34,23 @@ impl SubscriptionRepository {
         Ok(subscription)
     }
 
+    /// Create a new freemium subscription for a workspace (company)
+    pub async fn create_workspace_freemium(&self, user_id: Uuid, workspace_id: Uuid) -> Result<Subscription> {
+        let subscription = sqlx::query_as::<_, Subscription>(
+            r#"
+            INSERT INTO subscriptions (user_id, workspace_id, plan_type, status)
+            VALUES ($1, $2, 'freemium', 'active')
+            RETURNING *
+            "#,
+        )
+        .bind(user_id)
+        .bind(workspace_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(subscription)
+    }
+
     /// Get subscription by user ID
     pub async fn get_by_user_id(&self, user_id: Uuid) -> Result<Option<Subscription>> {
         let subscription = sqlx::query_as::<_, Subscription>(
@@ -41,6 +59,34 @@ impl SubscriptionRepository {
             "#,
         )
         .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(subscription)
+    }
+
+    /// Get personal subscription for a user (where workspace_id IS NULL)
+    pub async fn get_personal_by_user_id(&self, user_id: Uuid) -> Result<Option<Subscription>> {
+        let subscription = sqlx::query_as::<_, Subscription>(
+            r#"
+            SELECT * FROM subscriptions WHERE user_id = $1 AND workspace_id IS NULL
+            "#,
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(subscription)
+    }
+
+    /// Get subscription by workspace ID (company/workspace subscriptions)
+    pub async fn get_by_workspace_id(&self, workspace_id: Uuid) -> Result<Option<Subscription>> {
+        let subscription = sqlx::query_as::<_, Subscription>(
+            r#"
+            SELECT * FROM subscriptions WHERE workspace_id = $1
+            "#,
+        )
+        .bind(workspace_id)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -197,6 +243,32 @@ impl SubscriptionRepository {
             .await?;
 
         Ok(())
+    }
+
+    /// Get the highest active workspace plan for a user (across all workspace memberships)
+    pub async fn get_highest_workspace_plan_for_user(&self, user_id: Uuid) -> Result<Option<String>> {
+        let plan: Option<(String,)> = sqlx::query_as(
+            r#"
+            SELECT s.plan_type
+            FROM workspace_members wm
+            JOIN subscriptions s ON s.workspace_id = wm.workspace_id
+            WHERE wm.user_id = $1
+              AND wm.invitation_status = 'accepted'
+              AND s.status = 'active'
+            ORDER BY
+                CASE s.plan_type
+                    WHEN 'exclusive' THEN 3
+                    WHEN 'enterprise' THEN 2
+                    WHEN 'freemium' THEN 1
+                END DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(plan.map(|(p,)| p))
     }
 
     /// Get count of active projects for a user (for limit checking)

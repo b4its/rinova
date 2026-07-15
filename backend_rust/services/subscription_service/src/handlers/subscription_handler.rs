@@ -3,8 +3,9 @@
 use actix_web::{web, HttpResponse};
 use uuid::Uuid;
 
-use crate::models::{PlanDetails, PlanType, Subscription, SubscriptionChangeRequest};
+use crate::models::{FeatureFlags, PlanDetails, PlanLimits, PlanType, Subscription, SubscriptionChangeRequest, SubscriptionType};
 use crate::repository::SubscriptionRepository;
+use crate::services::SubscriptionService;
 
 /// Response for subscription plans list
 #[derive(Debug, serde::Serialize)]
@@ -40,14 +41,140 @@ pub async fn list_plans() -> HttpResponse {
     HttpResponse::Ok().json(PlansResponse { plans })
 }
 
-/// GET /api/v1/subscriptions/me - Get current user's subscription
+/// GET /api/v1/subscriptions/plans/personal - List personal plans
+pub async fn list_personal_plans() -> HttpResponse {
+    let plans = PlanDetails::all_plans_for(&SubscriptionType::Personal);
+    HttpResponse::Ok().json(PlansResponse { plans })
+}
+
+/// GET /api/v1/subscriptions/plans/workspace - List workspace/company plans
+pub async fn list_workspace_plans() -> HttpResponse {
+    let plans = PlanDetails::all_plans_for(&SubscriptionType::Workspace);
+    HttpResponse::Ok().json(PlansResponse { plans })
+}
+
+/// Request body for creating freemium subscription
+#[derive(Debug, serde::Deserialize)]
+pub struct CreateFreemiumRequest {
+    pub user_id: Uuid,
+    pub workspace_id: Option<Uuid>,
+}
+
+/// POST /api/v1/subscriptions/freemium - Create freemium subscription (personal)
+pub async fn create_freemium_subscription(
+    repo: web::Data<SubscriptionRepository>,
+    body: web::Json<CreateFreemiumRequest>,
+) -> HttpResponse {
+    let user_id = body.user_id;
+
+    // Check if user already has a personal subscription
+    match repo.get_personal_by_user_id(user_id).await {
+        Ok(Some(existing)) => {
+            let limits = existing.limits();
+            let features = existing.features();
+            return HttpResponse::Ok().json(SubscriptionResponse {
+                subscription: existing,
+                limits,
+                features,
+            });
+        }
+        Ok(None) => {}
+        Err(e) => {
+            tracing::error!("Failed to check existing subscription: {}", e);
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Internal server error".to_string(),
+                code: "INTERNAL_ERROR".to_string(),
+            });
+        }
+    }
+
+    // Create freemium subscription
+    match repo.create_freemium(user_id).await {
+        Ok(subscription) => {
+            let limits = subscription.limits();
+            let features = subscription.features();
+            HttpResponse::Created().json(SubscriptionResponse {
+                subscription,
+                limits,
+                features,
+            })
+        }
+        Err(e) => {
+            tracing::error!("Failed to create freemium subscription: {}", e);
+            HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Failed to create subscription".to_string(),
+                code: "CREATE_FAILED".to_string(),
+            })
+        }
+    }
+}
+
+/// POST /api/v1/subscriptions/workspace/freemium - Create workspace freemium subscription
+pub async fn create_workspace_freemium_subscription(
+    repo: web::Data<SubscriptionRepository>,
+    body: web::Json<CreateFreemiumRequest>,
+) -> HttpResponse {
+    let user_id = body.user_id;
+    let workspace_id = match body.workspace_id {
+        Some(id) => id,
+        None => {
+            return HttpResponse::BadRequest().json(ErrorResponse {
+                error: "workspace_id is required for workspace subscription".to_string(),
+                code: "MISSING_WORKSPACE_ID".to_string(),
+            });
+        }
+    };
+
+    // Check if workspace already has a subscription
+    match repo.get_by_workspace_id(workspace_id).await {
+        Ok(Some(existing)) => {
+            let limits = existing.limits();
+            let features = existing.features();
+            return HttpResponse::Ok().json(SubscriptionResponse {
+                subscription: existing,
+                limits,
+                features,
+            });
+        }
+        Ok(None) => {}
+        Err(e) => {
+            tracing::error!("Failed to check workspace subscription: {}", e);
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Internal server error".to_string(),
+                code: "INTERNAL_ERROR".to_string(),
+            });
+        }
+    }
+
+    // Create workspace freemium subscription
+    match repo.create_workspace_freemium(user_id, workspace_id).await {
+        Ok(subscription) => {
+            let limits = subscription.limits();
+            let features = subscription.features();
+            HttpResponse::Created().json(SubscriptionResponse {
+                subscription,
+                limits,
+                features,
+            })
+        }
+        Err(e) => {
+            tracing::error!("Failed to create workspace freemium subscription: {}", e);
+            HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Failed to create workspace subscription".to_string(),
+                code: "CREATE_FAILED".to_string(),
+            })
+        }
+    }
+}
+
+/// GET /api/v1/subscriptions/me - Get personal subscription by user ID
 pub async fn get_subscription(
     repo: web::Data<SubscriptionRepository>,
     path: web::Path<Uuid>,
 ) -> HttpResponse {
     let user_id = path.into_inner();
 
-    match repo.get_by_user_id(user_id).await {
+    match repo.get_personal_by_user_id(user_id).await {
         Ok(Some(subscription)) => {
             let limits = subscription.limits();
             let features = subscription.features();
@@ -58,7 +185,7 @@ pub async fn get_subscription(
             })
         }
         Ok(None) => HttpResponse::NotFound().json(ErrorResponse {
-            error: "Subscription not found".to_string(),
+            error: "Personal subscription not found".to_string(),
             code: "SUB_NOT_FOUND".to_string(),
         }),
         Err(e) => {
@@ -71,30 +198,106 @@ pub async fn get_subscription(
     }
 }
 
-/// POST /api/v1/subscriptions/upgrade - Upgrade subscription plan
+/// GET /api/v1/subscriptions/workspace/{workspace_id} - Get workspace subscription
+pub async fn get_workspace_subscription(
+    repo: web::Data<SubscriptionRepository>,
+    path: web::Path<Uuid>,
+) -> HttpResponse {
+    let workspace_id = path.into_inner();
+
+    match repo.get_by_workspace_id(workspace_id).await {
+        Ok(Some(subscription)) => {
+            let limits = subscription.limits();
+            let features = subscription.features();
+            HttpResponse::Ok().json(SubscriptionResponse {
+                subscription,
+                limits,
+                features,
+            })
+        }
+        Ok(None) => HttpResponse::NotFound().json(ErrorResponse {
+            error: "Workspace subscription not found".to_string(),
+            code: "SUB_NOT_FOUND".to_string(),
+        }),
+        Err(e) => {
+            tracing::error!("Failed to get workspace subscription: {}", e);
+            HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Internal server error".to_string(),
+                code: "INTERNAL_ERROR".to_string(),
+            })
+        }
+    }
+}
+
+/// GET /api/v1/subscriptions/me/effective-plan - Get effective plan for a user
+pub async fn get_effective_plan(
+    svc: web::Data<SubscriptionService>,
+    path: web::Path<Uuid>,
+) -> HttpResponse {
+    let user_id = path.into_inner();
+
+    match svc.get_effective_plan(user_id).await {
+        Ok(plan) => {
+            HttpResponse::Ok().json(serde_json::json!({
+                "plan_type": plan,
+                "limits": PlanLimits::for_plan(&plan),
+                "features": FeatureFlags::for_plan(&plan),
+            }))
+        }
+        Err(e) => {
+            tracing::error!("Failed to get effective plan: {}", e);
+            HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Internal server error".to_string(),
+                code: "INTERNAL_ERROR".to_string(),
+            })
+        }
+    }
+}
+
+/// POST /api/v1/subscriptions/{user_id}/upgrade - Upgrade subscription plan
 pub async fn upgrade_subscription(
     repo: web::Data<SubscriptionRepository>,
+    _svc: web::Data<SubscriptionService>,
     path: web::Path<Uuid>,
     body: web::Json<SubscriptionChangeRequest>,
 ) -> HttpResponse {
     let user_id = path.into_inner();
     let request = body.into_inner();
 
-    // Get current subscription
-    let current_subscription = match repo.get_by_user_id(user_id).await {
-        Ok(Some(sub)) => sub,
-        Ok(None) => {
-            return HttpResponse::NotFound().json(ErrorResponse {
-                error: "Subscription not found".to_string(),
-                code: "SUB_NOT_FOUND".to_string(),
-            })
+    // Get current subscription (personal or workspace)
+    let current_subscription = if let Some(wid) = request.workspace_id {
+        match repo.get_by_workspace_id(wid).await {
+            Ok(Some(sub)) => sub,
+            Ok(None) => {
+                return HttpResponse::NotFound().json(ErrorResponse {
+                    error: "Workspace subscription not found".to_string(),
+                    code: "SUB_NOT_FOUND".to_string(),
+                })
+            }
+            Err(e) => {
+                tracing::error!("Failed to get workspace subscription: {}", e);
+                return HttpResponse::InternalServerError().json(ErrorResponse {
+                    error: "Internal server error".to_string(),
+                    code: "INTERNAL_ERROR".to_string(),
+                });
+            }
         }
-        Err(e) => {
-            tracing::error!("Failed to get subscription: {}", e);
-            return HttpResponse::InternalServerError().json(ErrorResponse {
-                error: "Internal server error".to_string(),
-                code: "INTERNAL_ERROR".to_string(),
-            })
+    } else {
+        match repo.get_personal_by_user_id(user_id).await {
+            Ok(Some(sub)) => sub,
+            Ok(None) => {
+                return HttpResponse::NotFound().json(ErrorResponse {
+                    error: "Personal subscription not found".to_string(),
+                    code: "SUB_NOT_FOUND".to_string(),
+                })
+            }
+            Err(e) => {
+                tracing::error!("Failed to get subscription: {}", e);
+                return HttpResponse::InternalServerError().json(ErrorResponse {
+                    error: "Internal server error".to_string(),
+                    code: "INTERNAL_ERROR".to_string(),
+                });
+            }
         }
     };
 
@@ -109,6 +312,13 @@ pub async fn upgrade_subscription(
         });
     }
 
+    // Determine the correct price
+    let price_cents = if current_subscription.workspace_id.is_some() {
+        request.target_plan.price_cents_workspace()
+    } else {
+        request.target_plan.price_cents()
+    };
+
     // Update subscription plan
     match repo.update_plan(current_subscription.id, &request.target_plan).await {
         Ok(updated_subscription) => {
@@ -118,7 +328,7 @@ pub async fn upgrade_subscription(
                 &updated_subscription.id.to_string(),
                 request.target_plan.display_name(),
                 "upgrade",
-                request.target_plan.price_cents() as i64,
+                price_cents as i64,
             )
             .await;
 
@@ -149,21 +359,40 @@ pub async fn downgrade_subscription(
     let user_id = path.into_inner();
     let request = body.into_inner();
 
-    // Get current subscription
-    let current_subscription = match repo.get_by_user_id(user_id).await {
-        Ok(Some(sub)) => sub,
-        Ok(None) => {
-            return HttpResponse::NotFound().json(ErrorResponse {
-                error: "Subscription not found".to_string(),
-                code: "SUB_NOT_FOUND".to_string(),
-            })
+    // Get current subscription (personal or workspace)
+    let current_subscription = if let Some(wid) = request.workspace_id {
+        match repo.get_by_workspace_id(wid).await {
+            Ok(Some(sub)) => sub,
+            Ok(None) => {
+                return HttpResponse::NotFound().json(ErrorResponse {
+                    error: "Workspace subscription not found".to_string(),
+                    code: "SUB_NOT_FOUND".to_string(),
+                })
+            }
+            Err(e) => {
+                tracing::error!("Failed to get workspace subscription: {}", e);
+                return HttpResponse::InternalServerError().json(ErrorResponse {
+                    error: "Internal server error".to_string(),
+                    code: "INTERNAL_ERROR".to_string(),
+                });
+            }
         }
-        Err(e) => {
-            tracing::error!("Failed to get subscription: {}", e);
-            return HttpResponse::InternalServerError().json(ErrorResponse {
-                error: "Internal server error".to_string(),
-                code: "INTERNAL_ERROR".to_string(),
-            })
+    } else {
+        match repo.get_personal_by_user_id(user_id).await {
+            Ok(Some(sub)) => sub,
+            Ok(None) => {
+                return HttpResponse::NotFound().json(ErrorResponse {
+                    error: "Personal subscription not found".to_string(),
+                    code: "SUB_NOT_FOUND".to_string(),
+                })
+            }
+            Err(e) => {
+                tracing::error!("Failed to get subscription: {}", e);
+                return HttpResponse::InternalServerError().json(ErrorResponse {
+                    error: "Internal server error".to_string(),
+                    code: "INTERNAL_ERROR".to_string(),
+                });
+            }
         }
     };
 

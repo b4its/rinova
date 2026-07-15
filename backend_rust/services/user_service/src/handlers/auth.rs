@@ -104,16 +104,16 @@ pub async fn login(
     state: web::Data<AppState>,
     body: web::Json<LoginRequest>,
 ) -> Result<HttpResponse, ServiceError> {
-    // Login user
-    let user = services::login_user(
+    // Login user (returns user + effective plan)
+    let (user, plan) = services::login_user(
         &state.db,
         &body.email,
         &body.password,
         &state.zmq_publisher,
     ).await?;
 
-    // Generate JWT token
-    let token = services::generate_jwt_token(&user, &state.jwt_secret)?;
+    // Generate JWT token with effective plan
+    let token = services::generate_jwt_token(&user, &state.jwt_secret, &plan)?;
 
     Ok(HttpResponse::Ok()
         .cookie(
@@ -133,8 +133,11 @@ pub async fn verify_email(
 ) -> Result<HttpResponse, ServiceError> {
     let user = services::verify_user_email(&state.db, &body.token, &state.jwt_secret).await?;
 
+    // Resolve effective plan for the verified user
+    let plan = services::resolve_effective_plan(&state.db, user.id).await;
+
     // Generate JWT token for the user to auto-login after verification
-    let token = services::generate_jwt_token(&user, &state.jwt_secret)?;
+    let token = services::generate_jwt_token(&user, &state.jwt_secret, &plan)?;
 
     // Return response with redirect URL for onboarding
     Ok(HttpResponse::Ok()

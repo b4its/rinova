@@ -75,7 +75,8 @@ impl ProxyService {
             request_builder = request_builder
                 .header("X-User-ID", user.user_id.to_string())
                 .header("X-User-Email", user.email.clone())
-                .header("X-User-Plan", user.plan.clone());
+                .header("X-User-Plan", user.plan.clone())
+                .header("X-User-Role", user.role.clone());
         }
 
         // Add body for non-GET requests

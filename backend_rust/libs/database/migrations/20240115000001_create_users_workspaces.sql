@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255),
     account_type VARCHAR(50) NOT NULL DEFAULT 'personal',
+    role VARCHAR(50) NOT NULL DEFAULT 'user',
     email_verified_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

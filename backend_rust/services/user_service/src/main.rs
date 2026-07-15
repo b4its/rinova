@@ -98,6 +98,12 @@ async fn main() -> std::io::Result<()> {
                     .route("/me", web::get().to(handlers::get_current_user))
                     .route("/me", web::put().to(handlers::update_user)),
             )
+            .service(
+                web::scope("/api/v1/admin")
+                    .route("/users", web::get().to(handlers::admin_list_users))
+                    .route("/users/{id}", web::delete().to(handlers::admin_delete_user))
+                    .route("/users/{id}/role", web::put().to(handlers::admin_update_user_role)),
+            )
     })
     .bind(("0.0.0.0", port))?
     .run()

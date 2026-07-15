@@ -10,6 +10,7 @@ pub struct User {
     pub password_hash: String,
     pub full_name: Option<String>,
     pub account_type: AccountType,
+    pub role: UserRole,
     pub email_verified_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -20,6 +21,13 @@ pub struct User {
 pub enum AccountType {
     Personal,
     Company,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
+#[sqlx(type_name = "VARCHAR", rename_all = "lowercase")]
+pub enum UserRole {
+    User,
+    Superuser,
 }
 
 impl fmt::Display for AccountType {
@@ -109,11 +117,13 @@ pub enum InvitationStatus {
 pub struct Subscription {
     pub id: Uuid,
     pub user_id: Uuid,
+    pub workspace_id: Option<Uuid>,
     pub plan_type: PlanType,
     pub status: SubscriptionStatus,
     pub current_period_start: Option<DateTime<Utc>>,
     pub current_period_end: Option<DateTime<Utc>>,
     pub stripe_subscription_id: Option<String>,
+    pub stripe_customer_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -159,6 +169,13 @@ pub struct Claims {
     pub email: String,
     pub exp: usize,
     pub iat: usize,
+    pub role: UserRole,
+    #[serde(default = "default_plan")]
+    pub plan: String,
+}
+
+fn default_plan() -> String {
+    "freemium".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

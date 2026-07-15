@@ -164,7 +164,7 @@ impl GatewayConfig {
     /// Get service URL by route prefix
     pub fn get_service_url(&self, path: &str) -> Option<(&str, &ServiceConfig)> {
         // Match path prefix to service
-        if path.starts_with("/api/v1/auth") || path.starts_with("/api/v1/users") {
+        if path.starts_with("/api/v1/auth") || path.starts_with("/api/v1/users") || path.starts_with("/api/v1/admin") {
             self.services.get("users").map(|s| ("users", s))
         } else if path.starts_with("/api/v1/workspaces") {
             self.services.get("workspaces").map(|s| ("workspaces", s))

@@ -49,6 +49,8 @@ pub struct Subscription {
     pub id: Uuid,
     /// User ID who owns this subscription
     pub user_id: Uuid,
+    /// Workspace ID (if this is a workspace subscription)
+    pub workspace_id: Option<Uuid>,
     /// Current plan type
     pub plan_type: PlanType,
     /// Subscription status
@@ -68,12 +70,13 @@ pub struct Subscription {
 }
 
 impl Subscription {
-    /// Create a new freemium subscription for a user
-    pub fn new_freemium(user_id: Uuid) -> Self {
+    /// Create a new freemium subscription
+    pub fn new_freemium(user_id: Uuid, workspace_id: Option<Uuid>) -> Self {
         let now = Utc::now();
         Subscription {
             id: Uuid::new_v4(),
             user_id,
+            workspace_id,
             plan_type: PlanType::Freemium,
             status: SubscriptionStatus::Active,
             current_period_start: Some(now),
@@ -126,6 +129,42 @@ impl Subscription {
     pub fn is_paid(&self) -> bool {
         !matches!(self.plan_type, PlanType::Freemium)
     }
+
+    /// Check if this is a workspace subscription
+    pub fn is_workspace_subscription(&self) -> bool {
+        self.workspace_id.is_some()
+    }
+
+    /// Get the effective price in cents (personal vs workspace)
+    pub fn effective_price_cents(&self) -> u32 {
+        if self.is_workspace_subscription() {
+            self.plan_type.price_cents_workspace()
+        } else {
+            self.plan_type.price_cents()
+        }
+    }
+}
+
+/// Subscription type (personal vs workspace/company)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum SubscriptionType {
+    Personal,
+    Workspace,
+}
+
+impl Default for SubscriptionType {
+    fn default() -> Self {
+        SubscriptionType::Personal
+    }
+}
+
+/// Request body for creating/upgrading a subscription (supports workspace)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateSubscriptionRequest {
+    pub user_id: Uuid,
+    pub workspace_id: Option<Uuid>,
+    pub plan_type: Option<PlanType>,
 }
 
 /// Plan details for display (used in pricing page)
@@ -154,13 +193,29 @@ pub struct PlanDetails {
 }
 
 impl PlanDetails {
-    /// Get all available plans as details
-    pub fn all_plans() -> Vec<PlanDetails> {
-        vec![Self::freemium(), Self::enterprise(), Self::exclusive()]
+    /// Get all available plans for a given subscription type
+    pub fn all_plans_for(sub_type: &SubscriptionType) -> Vec<PlanDetails> {
+        match sub_type {
+            SubscriptionType::Personal => vec![
+                Self::freemium_personal(),
+                Self::enterprise_personal(),
+                Self::exclusive_personal(),
+            ],
+            SubscriptionType::Workspace => vec![
+                Self::freemium_workspace(),
+                Self::enterprise_workspace(),
+                Self::exclusive_workspace(),
+            ],
+        }
     }
 
-    /// Freemium plan details
-    pub fn freemium() -> Self {
+    /// Get all available plans as details (defaults to personal)
+    pub fn all_plans() -> Vec<PlanDetails> {
+        Self::all_plans_for(&SubscriptionType::Personal)
+    }
+
+    /// Freemium plan details (personal)
+    pub fn freemium_personal() -> Self {
         let features = FeatureFlags::for_freemium();
         let limits = PlanLimits::for_plan(&PlanType::Freemium);
 
@@ -183,8 +238,16 @@ impl PlanDetails {
         }
     }
 
-    /// Enterprise plan details
-    pub fn enterprise() -> Self {
+    /// Freemium plan details (workspace/company)
+    pub fn freemium_workspace() -> Self {
+        let mut p = Self::freemium_personal();
+        p.name = "Workspace Free".to_string();
+        p.cta_text = "Create Workspace".to_string();
+        p
+    }
+
+    /// Enterprise plan details (personal)
+    pub fn enterprise_personal() -> Self {
         let features = FeatureFlags::for_enterprise();
         let limits = PlanLimits::for_plan(&PlanType::Enterprise);
 
@@ -212,8 +275,35 @@ impl PlanDetails {
         }
     }
 
-    /// Exclusive plan details
-    pub fn exclusive() -> Self {
+    /// Enterprise plan details (workspace/company)
+    pub fn enterprise_workspace() -> Self {
+        PlanDetails {
+            plan_type: PlanType::Enterprise,
+            name: "Workspace Enterprise".to_string(),
+            price_cents: 99_00,
+            price_usd: 99.0,
+            billing_period: "per month".to_string(),
+            features: vec![
+                "Up to 10 projects".to_string(),
+                "Animation Editor".to_string(),
+                "Custom CSS Editor".to_string(),
+                "SEO Tools".to_string(),
+                "Responsive Design".to_string(),
+                "Asset Marketplace access".to_string(),
+                "Premium Components included".to_string(),
+                "Team Collaboration (up to 10)".to_string(),
+                "Workspace-wide subscription".to_string(),
+                "Priority support".to_string(),
+            ],
+            limits: PlanLimits::for_plan(&PlanType::Enterprise),
+            feature_flags: FeatureFlags::for_enterprise(),
+            is_popular: true,
+            cta_text: "Start Free Trial".to_string(),
+        }
+    }
+
+    /// Exclusive plan details (personal)
+    pub fn exclusive_personal() -> Self {
         let features = FeatureFlags::for_exclusive();
         let limits = PlanLimits::for_plan(&PlanType::Exclusive);
 
@@ -240,6 +330,33 @@ impl PlanDetails {
             cta_text: "Get Exclusive".to_string(),
         }
     }
+
+    /// Exclusive plan details (workspace/company)
+    pub fn exclusive_workspace() -> Self {
+        PlanDetails {
+            plan_type: PlanType::Exclusive,
+            name: "Workspace Exclusive".to_string(),
+            price_cents: 199_00,
+            price_usd: 199.0,
+            billing_period: "per month".to_string(),
+            features: vec![
+                "Unlimited projects".to_string(),
+                "Everything in Enterprise".to_string(),
+                "One-Click Publish".to_string(),
+                "Custom Domain (up to 5)".to_string(),
+                "Analytics Dashboard".to_string(),
+                "SSL Certificate included".to_string(),
+                "50GB Storage".to_string(),
+                "Team Collaboration (up to 50)".to_string(),
+                "Workspace-wide subscription".to_string(),
+                "Dedicated support".to_string(),
+            ],
+            limits: PlanLimits::for_plan(&PlanType::Exclusive),
+            feature_flags: FeatureFlags::for_exclusive(),
+            is_popular: false,
+            cta_text: "Get Exclusive".to_string(),
+        }
+    }
 }
 
 /// Request to upgrade/downgrade a subscription
@@ -249,6 +366,8 @@ pub struct SubscriptionChangeRequest {
     pub target_plan: PlanType,
     /// Stripe payment method ID (for upgrades)
     pub payment_method_id: Option<String>,
+    /// Workspace ID (if upgrading a workspace subscription)
+    pub workspace_id: Option<Uuid>,
 }
 
 /// Subscription comparison result
@@ -286,19 +405,31 @@ mod tests {
     #[test]
     fn test_subscription_new_freemium() {
         let user_id = Uuid::new_v4();
-        let sub = Subscription::new_freemium(user_id);
+        let sub = Subscription::new_freemium(user_id, None);
 
         assert_eq!(sub.user_id, user_id);
         assert_eq!(sub.plan_type, PlanType::Freemium);
         assert_eq!(sub.status, SubscriptionStatus::Active);
         assert!(sub.is_usable());
         assert!(!sub.is_paid());
+        assert!(sub.workspace_id.is_none());
+    }
+
+    #[test]
+    fn test_subscription_new_workspace_freemium() {
+        let user_id = Uuid::new_v4();
+        let workspace_id = Uuid::new_v4();
+        let sub = Subscription::new_freemium(user_id, Some(workspace_id));
+
+        assert_eq!(sub.user_id, user_id);
+        assert_eq!(sub.workspace_id, Some(workspace_id));
+        assert!(sub.is_workspace_subscription());
     }
 
     #[test]
     fn test_subscription_features() {
         let user_id = Uuid::new_v4();
-        let sub = Subscription::new_freemium(user_id);
+        let sub = Subscription::new_freemium(user_id, None);
 
         let features = sub.features();
         assert!(!features.animation_editor);
@@ -309,7 +440,7 @@ mod tests {
     #[test]
     fn test_subscription_limits() {
         let user_id = Uuid::new_v4();
-        let sub = Subscription::new_freemium(user_id);
+        let sub = Subscription::new_freemium(user_id, None);
 
         let limits = sub.limits();
         assert_eq!(limits.max_projects, 2);
@@ -333,5 +464,15 @@ mod tests {
         assert_eq!(plans[0].plan_type, PlanType::Freemium);
         assert_eq!(plans[1].plan_type, PlanType::Enterprise);
         assert_eq!(plans[2].plan_type, PlanType::Exclusive);
+    }
+
+    #[test]
+    fn test_workspace_plans() {
+        let plans = PlanDetails::all_plans_for(&SubscriptionType::Workspace);
+        assert_eq!(plans.len(), 3);
+
+        // Workspace plans should be more expensive
+        assert!(plans[1].price_cents > 29_00); // Enterprise workspace > $29
+        assert!(plans[2].price_cents > 79_00); // Exclusive workspace > $79
     }
 }

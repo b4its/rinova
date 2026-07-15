@@ -61,6 +61,15 @@ impl PlanType {
         }
     }
 
+    /// Get plan price in USD cents per month for workspace (company) subscriptions
+    pub fn price_cents_workspace(&self) -> u32 {
+        match self {
+            PlanType::Freemium => 0,
+            PlanType::Enterprise => 99_00,  // $99/month for workspace
+            PlanType::Exclusive => 199_00,  // $199/month for workspace
+        }
+    }
+
     /// Get plan price in USD per month (as f64)
     pub fn price_usd(&self) -> f64 {
         self.price_cents() as f64 / 100.0

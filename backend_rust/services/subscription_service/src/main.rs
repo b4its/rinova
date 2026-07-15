@@ -113,7 +113,7 @@ async fn main() -> std::io::Result<()> {
 
     // Create repository and service
     let repo = SubscriptionRepository::new(pool.clone());
-    let subscription_service = Arc::new(SubscriptionService::new(repo, stripe_service));
+    let subscription_service = Arc::new(SubscriptionService::new(repo.clone(), stripe_service));
 
     // Run migrations if needed
     // sqlx::migrate!().run(&pool).await.expect("Failed to run migrations");
@@ -126,14 +126,21 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(Cors::permissive())
             .app_data(web::Data::new(pool.clone()))
+            .app_data(web::Data::new(repo.clone()))
             .app_data(web::Data::new(subscription_service.clone()))
             .route("/health", web::get().to(health))
             .service(
                 web::scope("/api/v1/subscriptions")
                     .route("/plans", web::get().to(list_plans))
+                    .route("/plans/personal", web::get().to(list_personal_plans))
+                    .route("/plans/workspace", web::get().to(list_workspace_plans))
+                    .route("/freemium", web::post().to(create_freemium_subscription))
+                    .route("/workspace/freemium", web::post().to(create_workspace_freemium_subscription))
+                    .route("/workspace/{workspace_id}", web::get().to(get_workspace_subscription))
                     .route("/{user_id}", web::get().to(get_subscription))
                     .route("/{user_id}/upgrade", web::post().to(upgrade_subscription))
                     .route("/{user_id}/downgrade", web::post().to(downgrade_subscription))
+                    .route("/{user_id}/effective-plan", web::get().to(get_effective_plan))
                     .route("/{id}/cancel", web::post().to(cancel_subscription))
                     .route("/{user_id}/project-limit", web::get().to(check_project_limit))
             )

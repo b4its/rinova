@@ -21,6 +21,71 @@ pub struct VerificationClaims {
     pub purpose: String,  // "email_verification"
 }
 
+/// Create freemium subscription for a new user via HTTP call to subscription service
+async fn create_freemium_subscription(user_id: uuid::Uuid) -> Result<(), String> {
+    let subscription_service_url = std::env::var("SUBSCRIPTION_SERVICE_URL")
+        .unwrap_or_else(|_| "http://subscription-service:8002".to_string());
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{}/api/v1/subscriptions/freemium", subscription_service_url))
+        .json(&serde_json::json!({ "user_id": user_id }))
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await;
+
+    match response {
+        Ok(resp) if resp.status().is_success() => {
+            tracing::info!("Created freemium subscription for user: {}", user_id);
+            Ok(())
+        }
+        Ok(resp) => {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            tracing::warn!("Failed to create subscription: {} - {}", status, body);
+            Err(format!("Subscription service returned: {}", status))
+        }
+        Err(e) => {
+            tracing::error!("Failed to call subscription service: {}", e);
+            Err(e.to_string())
+        }
+    }
+}
+
+/// Create workspace freemium subscription for a company registration
+async fn create_workspace_freemium_subscription(user_id: uuid::Uuid, workspace_id: uuid::Uuid) -> Result<(), String> {
+    let subscription_service_url = std::env::var("SUBSCRIPTION_SERVICE_URL")
+        .unwrap_or_else(|_| "http://subscription-service:8002".to_string());
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{}/api/v1/subscriptions/workspace/freemium", subscription_service_url))
+        .json(&serde_json::json!({
+            "user_id": user_id,
+            "workspace_id": workspace_id,
+        }))
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await;
+
+    match response {
+        Ok(resp) if resp.status().is_success() => {
+            tracing::info!("Created workspace freemium subscription for user: {} workspace: {}", user_id, workspace_id);
+            Ok(())
+        }
+        Ok(resp) => {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            tracing::warn!("Failed to create workspace subscription: {} - {}", status, body);
+            Err(format!("Subscription service returned: {}", status))
+        }
+        Err(e) => {
+            tracing::error!("Failed to call subscription service: {}", e);
+            Err(e.to_string())
+        }
+    }
+}
+
 pub async fn register_user(
     pool: &DbPool,
     email: &str,
@@ -40,8 +105,37 @@ pub async fn register_user(
     // Create user
     let user = repository::create(pool, email, &password_hash, account_type.clone()).await?;
 
-    // Create Personal Workspace for the user
-    let workspace_id = repository::create_personal_workspace(pool, user.id).await?;
+    // Create workspace and subscription based on account type
+    let is_company = matches!(account_type, AccountType::Company);
+
+    let workspace_id = if is_company {
+        repository::create_company_workspace(pool, user.id).await?
+    } else {
+        repository::create_personal_workspace(pool, user.id).await?
+    };
+
+    // Create freemium subscription (best-effort, non-blocking)
+    let user_id = user.id;
+
+    tokio::spawn(async move {
+        if is_company {
+            // For company registrations, create a workspace subscription
+            if let Err(e) = create_workspace_freemium_subscription(user_id, workspace_id).await {
+                tracing::error!(
+                    "Failed to create workspace freemium subscription for user {}: {}",
+                    user_id, e
+                );
+            }
+        } else {
+            // Personal registration: create personal freemium subscription
+            if let Err(e) = create_freemium_subscription(user_id).await {
+                tracing::error!(
+                    "Failed to create freemium subscription for user {}: {}",
+                    user_id, e
+                );
+            }
+        }
+    });
 
     // Publish user registered event
     zmq_publisher.publish("user.registered", serde_json::json!({
@@ -61,7 +155,7 @@ pub async fn login_user(
     email: &str,
     password: &str,
     zmq_publisher: &ZeroMQPublisher,
-) -> ServiceResult<User> {
+) -> ServiceResult<(User, String)> {
     // Find user by email
     let user = repository::find_by_email(pool, email)
         .await?
@@ -80,18 +174,56 @@ pub async fn login_user(
         return Err(ServiceError::EmailNotVerified);
     }
 
+    // Resolve effective plan (max of personal + workspace subscriptions)
+    let plan = resolve_effective_plan(pool, user.id).await;
+
     // Publish login event
     zmq_publisher.publish("user.logged_in", serde_json::json!({
         "user_id": user.id,
         "email": user.email,
+        "plan": plan,
     })).await;
 
-    tracing::info!("User logged in: {}", user.email);
+    tracing::info!("User logged in: {} (plan: {})", user.email, plan);
 
-    Ok(user)
+    Ok((user, plan))
 }
 
-pub fn generate_jwt_token(user: &User, secret: &str) -> ServiceResult<String> {
+/// Resolve the effective plan for a user:
+/// - Checks personal subscription
+/// - Checks all workspace memberships with active subscriptions
+/// - Returns the highest plan (exclusive > enterprise > freemium)
+pub async fn resolve_effective_plan(pool: &DbPool, user_id: uuid::Uuid) -> String {
+    let personal_plan = repository::get_personal_plan(pool, user_id)
+        .await
+        .ok()
+        .flatten();
+
+    let workspace_plan = repository::get_highest_workspace_plan(pool, user_id)
+        .await
+        .ok()
+        .flatten();
+
+    // Priority: exclusive > enterprise > freemium
+    let priority = |plan: &str| -> u8 {
+        match plan {
+            "exclusive" => 3,
+            "enterprise" => 2,
+            _ => 1,
+        }
+    };
+
+    match (personal_plan, workspace_plan) {
+        (Some(p), Some(w)) => {
+            if priority(&p) >= priority(&w) { p } else { w }
+        }
+        (Some(p), None) => p,
+        (None, Some(w)) => w,
+        (None, None) => "freemium".to_string(),
+    }
+}
+
+pub fn generate_jwt_token(user: &User, secret: &str, plan: &str) -> ServiceResult<String> {
     let expiration = Utc::now()
         .checked_add_signed(Duration::days(7))
         .expect("valid timestamp")
@@ -102,6 +234,8 @@ pub fn generate_jwt_token(user: &User, secret: &str) -> ServiceResult<String> {
         email: user.email.clone(),
         exp: expiration,
         iat: Utc::now().timestamp() as usize,
+        role: user.role.clone(),
+        plan: plan.to_string(),
     };
 
     encode(

@@ -6272,6 +6272,7 @@ dependencies = [
  "lettre",
  "messaging",
  "regex",
+ "reqwest",
  "serde",
  "serde_json",
  "shared",

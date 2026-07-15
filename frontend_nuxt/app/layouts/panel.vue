@@ -51,6 +51,7 @@ const adminNavigation = computed(() => [
 ])
 
 const projectsExpanded = ref(false)
+const marketplaceExpanded = ref(false)
 
 const activeSectionId = computed(() => route.meta?.sidebarSection as string | undefined)
 
@@ -197,6 +198,25 @@ async function handleLogout() {
               <NuxtLink to="/panel/admin/templates" class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground" :class="activeSectionId === 'admin-templates' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'">
                 <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" /></svg>
                 <span class="truncate transition-opacity duration-200" :class="sidebarOpen ? 'opacity-100' : 'lg:opacity-0 opacity-0'">Templates</span>
+              </NuxtLink>
+            </div>
+          </div>
+
+          <!-- Marketplace dropdown -->
+          <div>
+            <button class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground w-full text-left" :class="marketplaceExpanded || activeSectionId === 'admin-mk-kategori' || activeSectionId === 'admin-mk-produk' ? 'bg-accent text-accent-foreground' : ''" @click="marketplaceExpanded = !marketplaceExpanded">
+              <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+              <span class="truncate flex-1 transition-opacity duration-200" :class="sidebarOpen ? 'opacity-100' : 'lg:opacity-0 opacity-0'">Marketplace</span>
+              <svg class="w-3.5 h-3.5 transition-transform duration-200" :class="marketplaceExpanded ? 'rotate-90' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+            </button>
+            <div v-if="marketplaceExpanded" class="ml-2 mt-0.5 space-y-0.5 border-l-2 border-muted pl-2">
+              <NuxtLink to="/panel/admin/marketplace/kategori" class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground" :class="activeSectionId === 'admin-mk-kategori' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
+                <span class="truncate transition-opacity duration-200" :class="sidebarOpen ? 'opacity-100' : 'lg:opacity-0 opacity-0'">Kategori</span>
+              </NuxtLink>
+              <NuxtLink to="/panel/admin/marketplace/produk" class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground" :class="activeSectionId === 'admin-mk-produk' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                <span class="truncate transition-opacity duration-200" :class="sidebarOpen ? 'opacity-100' : 'lg:opacity-0 opacity-0'">Produk</span>
               </NuxtLink>
             </div>
           </div>

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'panel', sidebarSection: 'admin-mk-produk' })
 
-interface Kategori { id: number; name: string }
+const api = useApi()
+
+interface Kategori { id: string; name: string }
 
 const kategories = ref<Kategori[]>([])
 const formName = ref('')
-const formKategori = ref('')
+const formKategoriId = ref('')
 const formDescriptions = ref('')
 const formVisual = ref('')
 const formPrice = ref(0)
@@ -18,25 +20,19 @@ const searchQuery = ref('')
 const matches = ref<{ start: number; end: number }[]>([])
 const currentMatch = ref(0)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const saving = ref(false)
 
-function loadKategori() {
-  const saved = localStorage.getItem('admin_marketplace_kategori')
-  if (saved) {
-    kategories.value = JSON.parse(saved)
-  } else {
-    kategories.value = [
-      { id: 1, name: 'Templates' },
-      { id: 2, name: 'Components' },
-      { id: 3, name: 'Assets' },
-    ]
+async function loadKategori() {
+  try {
+    const res = await api.get<{ data: Kategori[] }>('/marketplace/categories', { query: { page_size: 100 } })
+    kategories.value = res.data
+  } catch {
+    kategories.value = []
   }
 }
 loadKategori()
 
 onMounted(() => {
-  if (!formKategori.value && kategories.value.length) {
-    formKategori.value = kategories.value[0].name
-  }
   windowWidth.value = window.innerWidth
   window.addEventListener('resize', () => { windowWidth.value = window.innerWidth })
   window.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -48,7 +44,10 @@ onMounted(() => {
   })
 })
 
-const isTemplates = computed(() => formKategori.value === 'Templates')
+const isTemplates = computed(() => {
+  const k = kategories.value.find(k => k.id === formKategoriId.value)
+  return k?.name === 'Templates'
+})
 
 function findInText() {
   if (!searchQuery.value || !formHtmlCode.value) {
@@ -113,28 +112,32 @@ function resizeIframe(e: Event) {
   iframe.style.height = iframe.contentWindow?.document.body.scrollHeight + 'px'
 }
 
-function save() {
-  if (!formName.value.trim() || !formKategori.value) return
-  const saved = localStorage.getItem('admin_marketplace_produk')
-  const items: any[] = saved ? JSON.parse(saved) : []
-  items.push({
-    uuid: crypto.randomUUID(),
-    name: formName.value.trim(),
-    kategori: formKategori.value,
-    descriptions: formDescriptions.value,
-    visual: formVisual.value,
-    price: formPrice.value,
-    html_code: isTemplates.value ? formHtmlCode.value : undefined,
-    created_at: new Date().toISOString(),
-  })
-  localStorage.setItem('admin_marketplace_produk', JSON.stringify(items))
-  navigateTo('/panel/admin/marketplace/produk')
+async function save() {
+  if (!formName.value.trim() || !formKategoriId.value) return
+  saving.value = true
+  try {
+    const body: Record<string, unknown> = {
+      name: formName.value.trim(),
+      category_id: formKategoriId.value,
+      descriptions: formDescriptions.value,
+      visual: formVisual.value,
+      price: formPrice.value,
+    }
+    if (isTemplates.value) {
+      body.html_code = formHtmlCode.value
+    }
+    await api.post('/marketplace/products', body)
+    await navigateTo('/panel/admin/marketplace/produk')
+  } catch {
+    // handled by useApi
+  } finally {
+    saving.value = false
+  }
 }
 </script>
 
 <template>
   <div class="mx-auto max-w-6xl space-y-6">
-    <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div class="flex items-center gap-3">
         <NuxtLink to="/panel/admin/marketplace/produk" class="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground transition-colors">
@@ -148,13 +151,14 @@ function save() {
       </div>
       <div class="flex gap-2">
         <NuxtLink to="/panel/admin/marketplace/produk" class="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 sm:px-4 py-2 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground transition-colors">Cancel</NuxtLink>
-        <button class="inline-flex items-center justify-center rounded-md bg-primary px-3 sm:px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition-colors" @click="save">Save Produk</button>
+        <button class="inline-flex items-center justify-center rounded-md bg-primary px-3 sm:px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition-colors disabled:opacity-50" :disabled="saving" @click="save">
+          <svg v-if="saving" class="animate-spin -ml-1 mr-1.5 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+          Save Produk
+        </button>
       </div>
     </div>
 
-    <!-- Form -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-      <!-- Left: Form fields -->
       <div class="space-y-4">
         <div class="rounded-xl border bg-card shadow-sm p-4 sm:p-5 space-y-4">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -164,8 +168,8 @@ function save() {
             </div>
             <div>
               <label class="text-sm font-medium mb-1.5 block">Kategori</label>
-              <select v-model="formKategori" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                <option v-for="k in kategories" :key="k.id" :value="k.name">{{ k.name }}</option>
+              <select v-model="formKategoriId" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                <option v-for="k in kategories" :key="k.id" :value="k.id">{{ k.name }}</option>
               </select>
             </div>
           </div>
@@ -187,7 +191,6 @@ function save() {
           </div>
         </div>
 
-        <!-- HTML Code (only for Templates) -->
         <div v-if="isTemplates" class="rounded-xl border bg-card shadow-sm p-4 sm:p-5 space-y-4">
           <div>
             <label class="text-sm font-medium mb-1.5 block">HTML Code</label>
@@ -209,7 +212,6 @@ function save() {
         </div>
       </div>
 
-      <!-- Right: Preview (only for Templates) -->
       <div v-if="isTemplates" class="rounded-xl border bg-card shadow-sm overflow-hidden">
         <div class="px-3 sm:px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-muted/50 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div class="flex items-center gap-2">
@@ -266,7 +268,6 @@ function save() {
         </div>
       </div>
 
-      <!-- Right: Visual preview for non-template products -->
       <div v-else class="rounded-xl border bg-card shadow-sm overflow-hidden">
         <div class="px-3 sm:px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-muted/50 border-b">Product Preview</div>
         <div class="p-4 sm:p-6 flex flex-col items-center justify-center min-h-[200px] sm:min-h-[300px]">
@@ -282,7 +283,6 @@ function save() {
     </div>
   </div>
 
-  <!-- Full-screen preview overlay (for Templates) -->
   <div v-if="showFullPreview && formHtmlCode.trim() && isTemplates" class="fixed inset-0 z-[999] h-screen flex flex-col bg-background">
     <header class="h-12 bg-card border-b border-border flex items-center justify-between px-2 sm:px-4 shrink-0">
       <div class="flex items-center gap-1.5 sm:gap-3 min-w-0">

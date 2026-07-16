@@ -69,39 +69,6 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # Hyperledger Besu - Private Blockchain Network
-  # IBFT 2.0 consensus for Byzantine Fault Tolerance (Requirement 8.6)
-  # JSON-RPC and WebSocket endpoints for ownership verification (Requirement 8.1)
-  besu:
-    profiles: ["full", "blockchain"]
-    image: hyperledger/besu:latest
-    container_name: rinova-besu
-    volumes:
-      - besu_data:/opt/besu/data
-      - ./docker/hyperledger_besu_service:/opt/besu/config
-    ports:
-      - "8545:8545"   # JSON-RPC (synchronous operations)
-      - "8546:8546"   # WebSocket (real-time events)
-      - "30303:30303" # P2P (node discovery and block sync)
-      - "9545:9545"   # Metrics (Prometheus monitoring)
-    networks:
-      rinova-network:
-        aliases:
-          - besu
-    environment:
-      - BESU_LOGGING=INFO
-    command: >
-      --config-file=/opt/besu/config/config.toml
-    healthcheck:
-      # The Besu image has no curl/wget, so use bash's /dev/tcp to confirm the
-      # JSON-RPC port is accepting connections.
-      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8545' || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 60s
-    restart: unless-stopped
-
   # ZeroMQ Publisher (Message Bus)
   zmq-publisher:
     profiles: ["full", "backend"]
@@ -134,7 +101,6 @@ services:
       SUBSCRIPTION_SERVICE_URL: http://subscription-service:8002
       PROJECT_SERVICE_URL: http://project-service:8003
       PUBLISHING_SERVICE_URL: http://publishing-service:8004
-      BLOCKCHAIN_SERVICE_URL: http://blockchain-service:8005
       NOTIFICATION_SERVICE_URL: http://notification-service:8006
       REDIS_URL: redis://:${REDIS_PASSWORD:-rinova_redis_secret}@redis:6379
       RUST_LOG: info
@@ -223,7 +189,6 @@ services:
       # the service actually listens on (APP__SERVER__PORT default = 8002).
       SERVICE_PORT: "8002"
       ZMQ_PUBLISHER_URL: tcp://zmq-publisher:5555
-      BLOCKCHAIN_GRPC_URL: http://blockchain-service:9005
       RUST_LOG: info
     ports:
       - "8002:8002"
@@ -294,38 +259,6 @@ services:
       postgresql:
         condition: service_healthy
       mongodb:
-        condition: service_healthy
-      zmq-publisher:
-        condition: service_started
-    restart: unless-stopped
-
-  # Blockchain Service (Rust)
-  blockchain-service:
-    profiles: ["full", "blockchain"]
-    build:
-      context: ./backend_rust
-      dockerfile: Dockerfile.service
-      args:
-        SERVICE_NAME: blockchain_service
-    container_name: rinova-blockchain-service
-    environment:
-      BESU_RPC_URL: http://besu:8545
-      BESU_WS_URL: ws://besu:8546
-      BESU_PRIVATE_KEY: ${BESU_PRIVATE_KEY:-0x8f2a55949038a9610f50fb23b5883af3b4ecb3c3bb792cbcefbd1542c692be63}
-      BESU_CHAIN_ID: "20182024"
-      OWNERSHIP_CONTRACT_ADDRESS: ${OWNERSHIP_CONTRACT_ADDRESS:-0x0000000000000000000000000000000000000000}
-      AUDIT_CONTRACT_ADDRESS: ${AUDIT_CONTRACT_ADDRESS:-0x0000000000000000000000000000000000000000}
-      ZMQ_PUBLISHER_URL: tcp://zmq-publisher:5555
-      GRPC_PORT: "9005"
-      SERVICE_PORT: "8005"
-      RUST_LOG: info
-    ports:
-      - "8005:8005"
-      - "9005:9005"
-    networks:
-      - rinova-network
-    depends_on:
-      besu:
         condition: service_healthy
       zmq-publisher:
         condition: service_started
@@ -421,5 +354,4 @@ volumes:
     driver: local
   redis_data:
     driver: local
-  besu_data:
-    driver: local
+

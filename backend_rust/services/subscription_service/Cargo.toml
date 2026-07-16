@@ -35,11 +35,6 @@ async-stripe = { workspace = true }
 # Async utilities
 futures = { workspace = true }
 
-# gRPC client for blockchain service
-tonic = { workspace = true }
-prost = { workspace = true }
-proto = { path = "../../libs/proto" }
-
 # Local dependencies
 shared = { path = "../../libs/shared" }
 database = { path = "../../libs/database" }

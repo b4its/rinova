@@ -129,16 +129,6 @@ impl GatewayConfig {
             },
         );
 
-        services.insert(
-            "blockchain".to_string(),
-            ServiceConfig {
-                url: std::env::var("BLOCKCHAIN_SERVICE_URL")
-                    .unwrap_or_else(|_| "http://localhost:8005".to_string()),
-                health_path: "/health".to_string(),
-                timeout_secs: 60, // Longer timeout for blockchain ops
-            },
-        );
-
         Ok(GatewayConfig {
             server: ServerConfig {
                 host: std::env::var("GATEWAY_HOST")
@@ -170,12 +160,10 @@ impl GatewayConfig {
             self.services.get("workspaces").map(|s| ("workspaces", s))
         } else if path.starts_with("/api/v1/subscriptions") {
             self.services.get("subscriptions").map(|s| ("subscriptions", s))
-        } else if path.starts_with("/api/v1/projects") {
+        } else if path.starts_with("/api/v1/projects") || path.starts_with("/api/v1/marketplace") {
             self.services.get("projects").map(|s| ("projects", s))
         } else if path.starts_with("/api/v1/publish") {
             self.services.get("publish").map(|s| ("publish", s))
-        } else if path.starts_with("/api/v1/blockchain") {
-            self.services.get("blockchain").map(|s| ("blockchain", s))
         } else {
             None
         }

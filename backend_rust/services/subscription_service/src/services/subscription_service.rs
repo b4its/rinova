@@ -150,16 +150,6 @@ impl SubscriptionService {
             self.repo.update_plan(current.id, &target_plan).await?
         };
 
-        // Record the transaction on-chain (best-effort)
-        crate::services::record_subscription_tx(
-            &user_id.to_string(),
-            &updated.id.to_string(),
-            target_plan.display_name(),
-            "upgrade",
-            price_cents as i64,
-        )
-        .await;
-
         Ok(updated)
     }
 

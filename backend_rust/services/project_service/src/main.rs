@@ -31,7 +31,7 @@ mod repository;
 mod services;
 
 use handlers::*;
-use repository::{ComponentRepository, ProjectRepository};
+use repository::{ComponentRepository, MarketplaceRepository, ProjectRepository};
 
 /// Health check response
 #[derive(serde::Serialize)]
@@ -81,8 +81,11 @@ async fn main() -> std::io::Result<()> {
 
     tracing::info!("Connected to PostgreSQL");
 
-    // Create PostgreSQL repository
+    // Create PostgreSQL repositories
     let project_repo = ProjectRepository::new(pg_pool.clone());
+
+    // Marketplace repository (PostgreSQL)
+    let marketplace_repo = MarketplaceRepository::new(pg_pool.clone());
 
     // Connect to MongoDB and create component repository
     // Note: ComponentRepository is created once and cloned for each worker
@@ -102,6 +105,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(Cors::permissive())
             .app_data(web::Data::new(project_repo.clone()))
+            .app_data(web::Data::new(marketplace_repo.clone()))
             .app_data(web::Data::from(component_repo.clone()))
             .route("/health", web::get().to(health))
             .service(
@@ -125,6 +129,25 @@ async fn main() -> std::io::Result<()> {
                         "/{id}/components/{component_id}/move",
                         web::post().to(move_component),
                     ),
+            )
+            .service(
+                web::scope("/api/v1/marketplace")
+                    // Marketplace Categories
+                    .route("/categories", web::get().to(list_marketplace_categories))
+                    .route("/categories", web::post().to(create_marketplace_category))
+                    .route("/categories/{id}", web::put().to(update_marketplace_category))
+                    .route("/categories/{id}", web::delete().to(delete_marketplace_category))
+                    // Marketplace Products
+                    .route("/products", web::get().to(list_marketplace_products))
+                    .route("/products", web::post().to(create_marketplace_product))
+                    .route("/products/{id}", web::get().to(get_marketplace_product))
+                    .route("/products/{id}", web::put().to(update_marketplace_product))
+                    .route("/products/{id}", web::delete().to(delete_marketplace_product))
+                    // Project Categories
+                    .route("/project-categories", web::get().to(list_project_categories))
+                    .route("/project-categories", web::post().to(create_project_category))
+                    .route("/project-categories/{id}", web::put().to(update_project_category))
+                    .route("/project-categories/{id}", web::delete().to(delete_project_category)),
             )
     })
     .bind(&bind_address)?

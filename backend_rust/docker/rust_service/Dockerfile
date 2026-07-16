@@ -1,7 +1,7 @@
 # Rinova Website Builder - Rust Backend Services Dockerfile
 # Multi-stage build for optimized production image
 # Supports: user_service, subscription_service, project_service, 
-#            publishing_service, blockchain_service, notification_service, api_gateway
+#            publishing_service, notification_service, api_gateway, marketplace_service
 
 # =============================================================================
 # Stage 1: Builder - Compile Rust application
@@ -12,7 +12,6 @@ FROM rust:1.88-alpine AS builder
 # - musl-dev: Static linking for Alpine
 # - pkgconfig: Library configuration
 # - openssl-dev: SSL/TLS support
-# - protobuf: For gRPC/protobuf compilation
 # - g++: C++ compiler for zmq-sys
 # - zeromq-dev: ZeroMQ development files
 RUN apk add --no-cache \
@@ -95,14 +94,10 @@ ENV SERVICE_NAME=${SERVICE_NAME} \
     SUBSCRIPTION_SERVICE_URL="" \
     PROJECT_SERVICE_URL="" \
     PUBLISHING_SERVICE_URL="" \
-    BLOCKCHAIN_SERVICE_URL="" \
     NOTIFICATION_SERVICE_URL="" \
     # Security
     JWT_SECRET="" \
-    # Blockchain
-    BESU_RPC_URL="" \
-    BESU_WS_URL="" \
-    PRIVATE_KEY=""
+
 
 # Copy the compiled binary from builder
 COPY --from=builder /app/target/release/${SERVICE_NAME} /app/service

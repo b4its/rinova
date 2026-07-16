@@ -38,7 +38,6 @@ const navigation = computed(() => {
       icon: 'shopping-bag',
       locked: !sub.isFeatureEnabled('assetMarketplace')
     },
-    { sectionId: 'blockchain', name: 'Blockchain', href: '/panel/blockchain', icon: 'shield', locked: false },
     { sectionId: 'settings', name: 'Settings', href: '/panel/settings', icon: 'cog', locked: false }
   ]
 })
@@ -46,7 +45,6 @@ const navigation = computed(() => {
 const adminNavigation = computed(() => [
   { sectionId: 'admin-dashboard', name: 'Admin', href: '/panel/admin', icon: 'shield' },
   { sectionId: 'admin-users', name: 'Users', href: '/panel/admin/users', icon: 'users' },
-  { sectionId: 'admin-products', name: 'Products', href: '/panel/admin/products', icon: 'package' },
   { sectionId: 'admin-components', name: 'Components', href: '/panel/admin/components', icon: 'grid' },
 ])
 

@@ -134,6 +134,51 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
 
 -- ============================================================================
+-- MARKETPLACE CATEGORIES TABLE
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS marketplace_categories (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_marketplace_categories_name ON marketplace_categories(name);
+
+-- ============================================================================
+-- MARKETPLACE PRODUCTS TABLE
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS marketplace_products (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    category_id UUID NOT NULL REFERENCES marketplace_categories(id) ON DELETE CASCADE,
+    descriptions TEXT DEFAULT '',
+    visual VARCHAR(500) DEFAULT '',
+    price INTEGER NOT NULL DEFAULT 0,
+    html_code TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_marketplace_products_category ON marketplace_products(category_id);
+CREATE INDEX IF NOT EXISTS idx_marketplace_products_name ON marketplace_products(name);
+
+-- ============================================================================
+-- PROJECT CATEGORIES TABLE
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS project_categories (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_categories_name ON project_categories(name);
+
+-- ============================================================================
 -- PROJECTS TABLE (Migration 000006)
 -- Requirements: 6.1, 10.5 - Component Management and Publishing
 -- ============================================================================
@@ -429,6 +474,24 @@ CREATE TRIGGER update_projects_updated_at
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_marketplace_categories_updated_at ON marketplace_categories;
+CREATE TRIGGER update_marketplace_categories_updated_at 
+    BEFORE UPDATE ON marketplace_categories
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_marketplace_products_updated_at ON marketplace_products;
+CREATE TRIGGER update_marketplace_products_updated_at 
+    BEFORE UPDATE ON marketplace_products
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_project_categories_updated_at ON project_categories;
+CREATE TRIGGER update_project_categories_updated_at 
+    BEFORE UPDATE ON project_categories
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- ============================================================================
 -- RECORD APPLIED MIGRATIONS
 -- ============================================================================
@@ -458,6 +521,9 @@ COMMENT ON TABLE workspace_members IS 'Junction table for workspace membership w
 COMMENT ON TABLE subscriptions IS 'User subscription plans: freemium, enterprise, exclusive';
 COMMENT ON TABLE projects IS 'Website projects belonging to workspaces';
 COMMENT ON TABLE published_sites IS 'Published website metadata for hosting';
+COMMENT ON TABLE marketplace_categories IS 'Marketplace product categories';
+COMMENT ON TABLE marketplace_products IS 'Marketplace products with optional HTML code for templates';
+COMMENT ON TABLE project_categories IS 'Project template categories';
 COMMENT ON TABLE audit_logs IS 'System audit trail for user actions';
 
 COMMENT ON FUNCTION set_current_user_id(UUID) IS 'Set the current user context for Row-Level Security';
@@ -505,4 +571,20 @@ ON CONFLICT (workspace_id, user_id) DO NOTHING;
 INSERT INTO subscriptions (user_id, plan_type, status, current_period_start, current_period_end)
 SELECT id, 'freemium', 'active', NOW(), NOW() + INTERVAL '1 month'
 FROM users
+ON CONFLICT DO NOTHING;
+
+-- Seed marketplace categories
+INSERT INTO marketplace_categories (name) VALUES
+    ('Templates'),
+    ('Components'),
+    ('Assets')
+ON CONFLICT DO NOTHING;
+
+-- Seed project categories
+INSERT INTO project_categories (name) VALUES
+    ('Landing Page'),
+    ('Company Profile'),
+    ('Portfolio'),
+    ('Blog'),
+    ('E-commerce')
 ON CONFLICT DO NOTHING;

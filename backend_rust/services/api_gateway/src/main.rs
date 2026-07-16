@@ -14,7 +14,7 @@
 //! - /api/v1/subscriptions/* → Subscription Service
 //! - /api/v1/projects/*      → Project Service
 //! - /api/v1/publish/*       → Publishing Service
-//! - /api/v1/blockchain/*    → Blockchain Service
+//! - /api/v1/marketplace/*   → Project Service
 
 use actix_cors::Cors;
 use actix_web::{web, App, HttpServer, HttpRequest, HttpResponse};

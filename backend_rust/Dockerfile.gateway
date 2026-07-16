@@ -15,9 +15,7 @@ RUN apk add --no-cache \
     openssl-libs-static \
     g++ \
     zeromq-dev \
-    cmake \
-    protoc \
-    protobuf-dev
+    cmake
 
 WORKDIR /app
 
@@ -66,7 +64,6 @@ ENV GATEWAY_PORT=8080 \
     SUBSCRIPTION_SERVICE_URL=http://subscription-service:8002 \
     PROJECT_SERVICE_URL=http://project-service:8003 \
     PUBLISHING_SERVICE_URL=http://publishing-service:8004 \
-    BLOCKCHAIN_SERVICE_URL=http://blockchain-service:8005 \
     NOTIFICATION_SERVICE_URL=http://notification-service:8006
 
 # Copy the compiled binary from builder

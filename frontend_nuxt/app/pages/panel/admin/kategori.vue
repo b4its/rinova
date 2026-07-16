@@ -1,28 +1,51 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'panel', sidebarSection: 'admin-kategori' })
 
+const api = useApi()
+
 interface Kategori {
-  id: number
+  id: string
   name: string
+  created_at: string
 }
 
-const kategories = ref<Kategori[]>([
-  { id: 1, name: 'Landing Page' },
-  { id: 2, name: 'Company Profile' },
-  { id: 3, name: 'Portfolio' },
-])
+interface PaginatedResponse {
+  data: Kategori[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+}
 
-let nextId = 4
-
-const dialogOpen = ref(false)
-const editingId = ref<number | null>(null)
-const formName = ref('')
+const items = ref<Kategori[]>([])
 const search = ref('')
+const dialogOpen = ref(false)
+const editingId = ref<string | null>(null)
+const formName = ref('')
+const isLoading = ref(false)
 
-const filtered = computed(() => {
-  const q = search.value.toLowerCase()
-  return kategories.value.filter(k => k.name.toLowerCase().includes(q))
-})
+const currentPage = ref(1)
+const perPage = ref(10)
+const totalPages = ref(1)
+
+async function load() {
+  isLoading.value = true
+  try {
+    const res = await api.get<PaginatedResponse>('/marketplace/project-categories', {
+      query: { page: currentPage.value, page_size: perPage.value, search: search.value || undefined }
+    })
+    items.value = res.data
+    totalPages.value = res.total_pages
+  } catch {
+    items.value = []
+  } finally {
+    isLoading.value = false
+  }
+}
+
+load()
+
+watch([search, currentPage], load)
 
 function openAdd() {
   editingId.value = null
@@ -36,19 +59,24 @@ function openEdit(k: Kategori) {
   dialogOpen.value = true
 }
 
-function save() {
+async function save() {
   if (!formName.value.trim()) return
-  if (editingId.value) {
-    const k = kategories.value.find(k => k.id === editingId.value)
-    if (k) k.name = formName.value.trim()
-  } else {
-    kategories.value.push({ id: nextId++, name: formName.value.trim() })
-  }
-  dialogOpen.value = false
+  try {
+    if (editingId.value) {
+      await api.put(`/marketplace/project-categories/${editingId.value}`, { name: formName.value.trim() })
+    } else {
+      await api.post('/marketplace/project-categories', { name: formName.value.trim() })
+    }
+    dialogOpen.value = false
+    await load()
+  } catch {}
 }
 
-function remove(id: number) {
-  kategories.value = kategories.value.filter(k => k.id !== id)
+async function remove(id: string) {
+  try {
+    await api.del(`/marketplace/project-categories/${id}`)
+    await load()
+  } catch {}
 }
 </script>
 
@@ -67,32 +95,39 @@ function remove(id: number) {
       <input v-model="search" type="text" placeholder="Search categories..." class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 pl-9 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
     </div>
 
-    <div class="rounded-xl border bg-card text-card-foreground shadow-sm">
+    <div v-if="isLoading" class="flex items-center justify-center py-12">
+      <svg class="animate-spin h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+    </div>
+
+    <div v-else class="rounded-xl border bg-card text-card-foreground shadow-sm">
       <table class="w-full">
         <thead>
           <tr class="border-b border-border">
-            <th class="h-10 px-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">ID</th>
             <th class="h-10 px-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</th>
             <th class="h-10 px-4 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="k in filtered" :key="k.id" class="border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
-            <td class="p-4 text-sm font-mono text-muted-foreground">{{ k.id }}</td>
+          <tr v-for="k in items" :key="k.id" class="border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
             <td class="p-4 text-sm font-medium">{{ k.name }}</td>
             <td class="p-4 text-right">
               <button class="inline-flex items-center justify-center rounded-md px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground mr-1" @click="openEdit(k)">Edit</button>
               <button class="inline-flex items-center justify-center rounded-md px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors" @click="remove(k.id)">Delete</button>
             </td>
           </tr>
-          <tr v-if="!filtered.length">
-            <td colspan="3" class="p-8 text-center text-sm text-muted-foreground">No categories found.</td>
+          <tr v-if="!items.length && !isLoading">
+            <td colspan="2" class="p-8 text-center text-sm text-muted-foreground">No categories found.</td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <!-- Dialog -->
+    <div v-if="totalPages > 1" class="flex items-center justify-center gap-2">
+      <button class="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50" :disabled="currentPage <= 1" @click="currentPage--">Previous</button>
+      <span class="text-sm text-muted-foreground">{{ currentPage }} / {{ totalPages }}</span>
+      <button class="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50" :disabled="currentPage >= totalPages" @click="currentPage++">Next</button>
+    </div>
+
     <div v-if="dialogOpen" class="fixed inset-0 z-50 flex items-center justify-center">
       <div class="fixed inset-0 bg-black/80" @click="dialogOpen = false" />
       <div class="relative bg-background text-foreground rounded-xl shadow-lg border w-full max-w-md mx-4 p-6 space-y-4">
